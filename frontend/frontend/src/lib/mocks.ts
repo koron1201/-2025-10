@@ -3,6 +3,12 @@ import type {
   GenerateEmailResponse,
   SaveHistoryRequest,
   SaveHistoryResponse,
+  SlackIntegrationRequest,
+  SlackIntegrationResponse,
+  OutlookIntegrationRequest,
+  OutlookIntegrationResponse,
+  GoogleCalendarIntegrationRequest,
+  GoogleCalendarIntegrationResponse,
 } from '../types/api'
 
 function delay(ms: number): Promise<void> {
@@ -25,8 +31,48 @@ export async function saveHistoryMock(
 ): Promise<SaveHistoryResponse> {
   await delay(200)
   const randomId = Math.random().toString(36).slice(2, 10)
-  const isDuplicate = payload.emailBody.length % 2 === 0
-  return { historyId: `mock-${randomId}`, isDuplicate }
+  const normalized = payload.emailBody
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .slice(0, 120)
+  const hashLike = Array.from(normalized).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  const similarityScore = (hashLike % 100) / 100
+  const isDuplicate = similarityScore > 0.72
+  const duplicateOfId = isDuplicate ? `mock-prev-${(hashLike % 7) + 1}` : undefined
+  return { historyId: `mock-${randomId}`, isDuplicate, similarityScore, duplicateOfId }
+}
+
+export async function sendSlackMock(
+  payload: SlackIntegrationRequest,
+): Promise<SlackIntegrationResponse> {
+  await delay(250)
+  if (!payload.message || !payload.channelId) {
+    return { status: 'error', errorMessage: 'message と channelId は必須です' }
+  }
+  const ts = `${Date.now()}.${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+  return { status: 'ok', ts }
+}
+
+export async function sendOutlookMock(
+  payload: OutlookIntegrationRequest,
+): Promise<OutlookIntegrationResponse> {
+  await delay(300)
+  if (!payload.recipient || !payload.subject || !payload.body) {
+    return { status: 'error', errorMessage: 'recipient, subject, body は必須です' }
+  }
+  const messageId = `mock-msg-${Math.random().toString(36).slice(2, 10)}`
+  return { status: 'ok', messageId }
+}
+
+export async function createCalendarEventMock(
+  payload: GoogleCalendarIntegrationRequest,
+): Promise<GoogleCalendarIntegrationResponse> {
+  await delay(300)
+  if (!payload.title || !payload.startIso || !payload.endIso) {
+    return { status: 'error', errorMessage: 'title, startIso, endIso は必須です' }
+  }
+  const eventId = `mock-event-${Math.random().toString(36).slice(2, 10)}`
+  return { status: 'ok', eventId }
 }
 
 
