@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import './App.css'
 import { generateEmail, saveHistory, sendSlack, sendOutlook, createCalendarEvent } from './lib/apiClient'
 import type { GenerateEmailResponse, SaveHistoryResponse } from './types/api'
+import { useLanguage } from './contexts/LanguageContext'
+import { type Language, languageNames } from './lib/i18n'
 
 function App() {
+  const { language, setLanguage, t } = useLanguage()
   const [keywordsInput, setKeywordsInput] = useState('')
   const [recipient, setRecipient] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,6 +24,24 @@ function App() {
   const [calEnd, setCalEnd] = useState('')
   const [calAttendees, setCalAttendees] = useState('')
   const [calStatus, setCalStatus] = useState<string | null>(null)
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
+  const languageDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close language dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
+        setShowLanguageDropdown(false)
+      }
+    }
+
+    if (showLanguageDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [showLanguageDropdown])
 
   const keywords = useMemo(
     () =>
@@ -115,12 +136,12 @@ function App() {
     <div className="wa-app">
       <header className="wa-header">
         <button className="wa-header-menu" aria-label="メニュー" />
-        <div className="wa-logo" aria-label="WAMail ロゴ">WAMail</div>
+        <div className="wa-logo" aria-label={`${t.appName} ロゴ`}>{t.appName}</div>
         <div className="wa-search">
           <span className="wa-search-icon" aria-hidden="true" />
           <input
             className="wa-search-input"
-            placeholder="Search mail"
+            placeholder={t.searchPlaceholder}
             aria-label="検索"
           />
           <button className="wa-search-filter" aria-label="フィルター" />
@@ -128,6 +149,31 @@ function App() {
         <div className="wa-header-actions">
           <button className="wa-hbtn" aria-label="ヘルプ" />
           <button className="wa-hbtn" aria-label="設定" />
+          <div className="wa-language-selector" ref={languageDropdownRef}>
+            <button 
+              className="wa-hbtn wa-language-btn" 
+              aria-label={t.language}
+              onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+            >
+              🌐
+            </button>
+            {showLanguageDropdown && (
+              <div className="wa-language-dropdown">
+                {(Object.keys(languageNames) as Language[]).map((lang) => (
+                  <button
+                    key={lang}
+                    className={`wa-language-option ${language === lang ? 'active' : ''}`}
+                    onClick={() => {
+                      setLanguage(lang)
+                      setShowLanguageDropdown(false)
+                    }}
+                  >
+                    {languageNames[lang]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="wa-hbtn" aria-label="アプリ" />
           <div className="wa-avatar" aria-label="ユーザー" />
         </div>
@@ -137,44 +183,44 @@ function App() {
         <aside className="wa-nav">
           <button className="wa-compose">
             <span className="wa-compose-icon" aria-hidden="true" />
-            <span>Compose</span>
+            <span>{t.compose}</span>
           </button>
 
           <nav className="wa-nav-list">
             <a className="wa-nav-item active">
               <span className="wa-nav-icon inbox" aria-hidden="true" />
-              <span className="label">Inbox</span>
+              <span className="label">{t.inbox}</span>
               <span className="count">7</span>
             </a>
             <a className="wa-nav-item">
               <span className="wa-nav-icon star" aria-hidden="true" />
-              <span className="label">Starred</span>
+              <span className="label">{t.starred}</span>
             </a>
             <a className="wa-nav-item">
               <span className="wa-nav-icon clock" aria-hidden="true" />
-              <span className="label">Snoozed</span>
+              <span className="label">{t.snoozed}</span>
             </a>
             <a className="wa-nav-item">
               <span className="wa-nav-icon send" aria-hidden="true" />
-              <span className="label">Sent</span>
+              <span className="label">{t.sent}</span>
             </a>
             <a className="wa-nav-item">
               <span className="wa-nav-icon file" aria-hidden="true" />
-              <span className="label">Drafts</span>
+              <span className="label">{t.drafts}</span>
             </a>
           </nav>
 
           <div className="wa-section">
-            <div className="wa-subheader">Meet</div>
-            <a className="wa-nav-item"><span className="wa-nav-icon video" aria-hidden="true" /><span className="label">New meeting</span></a>
-            <a className="wa-nav-item"><span className="wa-nav-icon keyboard" aria-hidden="true" /><span className="label">Join a meeting</span></a>
+            <div className="wa-subheader">{t.meet}</div>
+            <a className="wa-nav-item"><span className="wa-nav-icon video" aria-hidden="true" /><span className="label">{t.newMeeting}</span></a>
+            <a className="wa-nav-item"><span className="wa-nav-icon keyboard" aria-hidden="true" /><span className="label">{t.joinMeeting}</span></a>
           </div>
 
           <div className="wa-section">
-            <div className="wa-subheader">Hangouts</div>
+            <div className="wa-subheader">{t.hangouts}</div>
             <div className="wa-no-chats">
-              <div>No recent chats</div>
-              <div className="wa-start-chat">Start a new one</div>
+              <div>{t.noRecentChats}</div>
+              <div className="wa-start-chat">{t.startNewChat}</div>
             </div>
           </div>
         </aside>
@@ -202,7 +248,7 @@ function App() {
               </div>
             </div>
             <div className="wa-toolbar-right">
-              <span className="wa-range">7 of 785</span>
+              <span className="wa-range">7 {t.pageInfo} 785</span>
               <div className="wa-tgroup">
                 <button className="wa-tbtn prev" aria-label="前へ" />
                 <button className="wa-tbtn next" aria-label="次へ" />
@@ -215,7 +261,7 @@ function App() {
             <div className="wa-mail-head">
               <div className="wa-mail-title">
                 <div className="title">{result ? result.subject : 'Place for your email content'}</div>
-                <div className="tag">Inbox</div>
+                <div className="tag">{t.inbox}</div>
               </div>
               <div className="wa-mail-actions">
                 <button className="wa-tbtn print" aria-label="印刷" />
@@ -225,15 +271,15 @@ function App() {
 
             <div className="wa-mail-meta">
               <div className="wa-sender">
-                <div className="avatar" />
+                <div className="avatar">S</div>
                 <div className="meta">
                   <div className="row1">
-                    <div className="name">Sender Name</div>
+                    <div className="name">{t.senderName}</div>
                     <div className="email">&lt;email@domain.com&gt;</div>
-                    <button className="unsubscribe">Unsubscribe</button>
+                    <button className="unsubscribe">{t.unsubscribe}</button>
                   </div>
                   <div className="row2">
-                    <div className="to">to me</div>
+                    <div className="to">{t.toMe}</div>
                   </div>
                 </div>
               </div>
@@ -247,77 +293,77 @@ function App() {
 
             <div className="wa-mail-body">
               {import.meta.env.VITE_USE_MOCK === 'true' && (
-                <div className="wa-mock">モックモード（バックエンド不要）</div>
+                <div className="wa-mock">{t.mockMode}</div>
               )}
               <div className="wa-form">
                 <label className="wa-field">
-                  <span className="wa-field-label">受信者（任意）</span>
+                  <span className="wa-field-label">{t.recipientOptional}</span>
                   <input
                     className="wa-input"
-                    placeholder="例: tanaka@example.com"
+                    placeholder={t.recipientPlaceholder}
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
                   />
                 </label>
                 <label className="wa-field">
-                  <span className="wa-field-label">キーワード（カンマ区切り）</span>
+                  <span className="wa-field-label">{t.keywordsLabel}</span>
                   <input
                     className="wa-input"
-                    placeholder="例: 見積, 今週金曜, 議事録"
+                    placeholder={t.keywordsPlaceholder}
                     value={keywordsInput}
                     onChange={(e) => setKeywordsInput(e.target.value)}
                   />
                 </label>
                 <div className="wa-actions">
                   <button className="wa-btn primary" onClick={onGenerate} disabled={loading || keywords.length === 0}>
-                    {loading ? '生成中…' : 'メールを作成'}
+                    {loading ? t.generating : t.generateEmail}
                   </button>
-                  <button className="wa-btn" onClick={onSave} disabled={!result}>履歴に保存</button>
+                  <button className="wa-btn" onClick={onSave} disabled={!result}>{t.saveToHistory}</button>
                 </div>
                 {saveResult && (
                   <div className="wa-section-box">
                     {saveResult.isDuplicate ? (
-                      <>⚠️ 過去に似た内容のメールが保存されています。内容を確認してから送信してください。</>
+                      <>⚠️ {t.duplicateWarning}</>
                     ) : (
-                      <>✅ 履歴に保存しました</>
+                      <>✅ {t.savedToHistory}</>
                     )}
                   </div>
                 )}
-                {error && <div className="wa-error">エラー: {error}</div>}
+                {error && <div className="wa-error">{t.errorLabel}: {error}</div>}
               </div>
 
               {result && (
                 <>
                   <div className="wa-result">
                     <div className="wa-result-section">
-                      <div className="wa-section-title">件名</div>
+                      <div className="wa-section-title">{t.subject}</div>
                       <div className="wa-section-box">{result.subject}</div>
                     </div>
                     <div className="wa-result-section">
-                      <div className="wa-section-title">本文</div>
+                      <div className="wa-section-title">{t.body}</div>
                       <textarea className="wa-section-textarea" readOnly value={result.body} />
                     </div>
                   </div>
                   <div className="wa-result-section">
-                    <div className="wa-section-title">外部アプリに共有</div>
+                    <div className="wa-section-title">{t.shareWithExternalApps}</div>
                     <div className="wa-tabs">
-                      <button className={`wa-tab ${integrationTab === 'slack' ? 'active' : ''}`} onClick={() => setIntegrationTab('slack')}>Slack</button>
-                      <button className={`wa-tab ${integrationTab === 'outlook' ? 'active' : ''}`} onClick={() => setIntegrationTab('outlook')}>Outlook</button>
-                      <button className={`wa-tab ${integrationTab === 'calendar' ? 'active' : ''}`} onClick={() => setIntegrationTab('calendar')}>Google Calendar</button>
+                      <button className={`wa-tab ${integrationTab === 'slack' ? 'active' : ''}`} onClick={() => setIntegrationTab('slack')}>{t.slack}</button>
+                      <button className={`wa-tab ${integrationTab === 'outlook' ? 'active' : ''}`} onClick={() => setIntegrationTab('outlook')}>{t.outlook}</button>
+                      <button className={`wa-tab ${integrationTab === 'calendar' ? 'active' : ''}`} onClick={() => setIntegrationTab('calendar')}>{t.googleCalendar}</button>
                     </div>
 
                     {integrationTab === 'slack' && (
                       <div className="wa-tabpanel">
                         <div className="wa-field">
-                          <span className="wa-field-label">チャンネルID</span>
-                          <input className="wa-input" placeholder="例: C0123456 または general" value={slackChannel} onChange={(e) => setSlackChannel(e.target.value)} />
+                          <span className="wa-field-label">{t.channelId}</span>
+                          <input className="wa-input" placeholder={t.channelIdPlaceholder} value={slackChannel} onChange={(e) => setSlackChannel(e.target.value)} />
                         </div>
                         <div className="wa-field">
-                          <span className="wa-field-label">メッセージ（任意に追記）</span>
-                          <input className="wa-input" placeholder="件名+本文に追記したい内容" value={slackMessage} onChange={(e) => setSlackMessage(e.target.value)} />
+                          <span className="wa-field-label">{t.additionalMessage}</span>
+                          <input className="wa-input" placeholder={t.additionalMessagePlaceholder} value={slackMessage} onChange={(e) => setSlackMessage(e.target.value)} />
                         </div>
                         <div className="wa-actions">
-                          <button className="wa-btn" onClick={onSendSlack}>Slackに送信</button>
+                          <button className="wa-btn" onClick={onSendSlack}>{t.sendToSlack}</button>
                         </div>
                         {slackStatus && <div className="wa-section-box">{slackStatus}</div>}
                       </div>
@@ -326,11 +372,11 @@ function App() {
                     {integrationTab === 'outlook' && (
                       <div className="wa-tabpanel">
                         <div className="wa-field">
-                          <span className="wa-field-label">宛先（メールアドレス）</span>
-                          <input className="wa-input" placeholder="例: tanaka@example.com" value={outlookRecipient} onChange={(e) => setOutlookRecipient(e.target.value)} />
+                          <span className="wa-field-label">{t.emailRecipient}</span>
+                          <input className="wa-input" placeholder={t.emailRecipientPlaceholder} value={outlookRecipient} onChange={(e) => setOutlookRecipient(e.target.value)} />
                         </div>
                         <div className="wa-actions">
-                          <button className="wa-btn" onClick={onSendOutlook} disabled={!outlookRecipient}>Outlookで送信</button>
+                          <button className="wa-btn" onClick={onSendOutlook} disabled={!outlookRecipient}>{t.sendWithOutlook}</button>
                         </div>
                         {outlookStatus && <div className="wa-section-box">{outlookStatus}</div>}
                       </div>
@@ -339,23 +385,23 @@ function App() {
                     {integrationTab === 'calendar' && (
                       <div className="wa-tabpanel">
                         <div className="wa-field">
-                          <span className="wa-field-label">タイトル</span>
-                          <input className="wa-input" placeholder="例: 打ち合わせ" value={calTitle} onChange={(e) => setCalTitle(e.target.value)} />
+                          <span className="wa-field-label">{t.eventTitle}</span>
+                          <input className="wa-input" placeholder={t.eventTitlePlaceholder} value={calTitle} onChange={(e) => setCalTitle(e.target.value)} />
                         </div>
                         <div className="wa-field">
-                          <span className="wa-field-label">開始日時</span>
+                          <span className="wa-field-label">{t.startDateTime}</span>
                           <input type="datetime-local" className="wa-input" value={calStart} onChange={(e) => setCalStart(e.target.value)} />
                         </div>
                         <div className="wa-field">
-                          <span className="wa-field-label">終了日時</span>
+                          <span className="wa-field-label">{t.endDateTime}</span>
                           <input type="datetime-local" className="wa-input" value={calEnd} onChange={(e) => setCalEnd(e.target.value)} />
                         </div>
                         <div className="wa-field">
-                          <span className="wa-field-label">参加者（カンマ区切り）</span>
-                          <input className="wa-input" placeholder="例: sato@example.com,suzuki@example.com" value={calAttendees} onChange={(e) => setCalAttendees(e.target.value)} />
+                          <span className="wa-field-label">{t.attendees}</span>
+                          <input className="wa-input" placeholder={t.attendeesPlaceholder} value={calAttendees} onChange={(e) => setCalAttendees(e.target.value)} />
                         </div>
                         <div className="wa-actions">
-                          <button className="wa-btn" onClick={onCreateEvent}>予定を作成</button>
+                          <button className="wa-btn" onClick={onCreateEvent}>{t.createEvent}</button>
                         </div>
                         {calStatus && <div className="wa-section-box">{calStatus}</div>}
                       </div>
