@@ -3,8 +3,20 @@ import type {
   GenerateEmailResponse,
   SaveHistoryRequest,
   SaveHistoryResponse,
+  SlackIntegrationRequest,
+  SlackIntegrationResponse,
+  OutlookIntegrationRequest,
+  OutlookIntegrationResponse,
+  GoogleCalendarIntegrationRequest,
+  GoogleCalendarIntegrationResponse,
 } from '../types/api'
-import { generateEmailMock, saveHistoryMock } from './mocks'
+import {
+  generateEmailMock,
+  saveHistoryMock,
+  sendSlackMock,
+  sendOutlookMock,
+  createCalendarEventMock,
+} from './mocks'
 
 const defaultHeaders: HeadersInit = {
   'Content-Type': 'application/json',
@@ -48,5 +60,53 @@ export async function saveHistory(
     signal,
   })
   return handleJson<SaveHistoryResponse>(res)
+}
+
+export async function sendSlack(
+  payload: SlackIntegrationRequest,
+  signal?: AbortSignal,
+): Promise<SlackIntegrationResponse> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    return sendSlackMock(payload)
+  }
+  const res = await fetch('/api/integrations/slack', {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(payload),
+    signal,
+  })
+  return handleJson<SlackIntegrationResponse>(res)
+}
+
+export async function sendOutlook(
+  payload: OutlookIntegrationRequest,
+  signal?: AbortSignal,
+): Promise<OutlookIntegrationResponse> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    return sendOutlookMock(payload)
+  }
+  const res = await fetch('/api/integrations/outlook', {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(payload),
+    signal,
+  })
+  return handleJson<OutlookIntegrationResponse>(res)
+}
+
+export async function createCalendarEvent(
+  payload: GoogleCalendarIntegrationRequest,
+  signal?: AbortSignal,
+): Promise<GoogleCalendarIntegrationResponse> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    return createCalendarEventMock(payload)
+  }
+  const res = await fetch('/api/integrations/google-calendar', {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(payload),
+    signal,
+  })
+  return handleJson<GoogleCalendarIntegrationResponse>(res)
 }
 
