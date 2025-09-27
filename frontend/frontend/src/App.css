@@ -408,6 +408,23 @@
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(60,64,67,0.1), 0 2px 6px rgba(60,64,67,0.1);
 }
+
+/* mailbox list view */
+.wa-list {
+  position: absolute;
+  left: 0; right: 0; top: 56px; bottom: 0;
+  margin: 0 32px 32px 32px;
+  padding: 16px;
+  display: grid; gap: 12px; align-content: start;
+}
+.wa-mailrow {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px;
+  background: #fff; border: 1px solid #e8eaed; border-radius: 8px;
+  padding: 12px;
+}
+.wa-mailrow-subject { font: 600 14px/20px 'Google Sans', sans-serif; color: #3c4043; margin-bottom: 4px; }
+.wa-mailrow-snippet { color: #5f6368; font: 400 13px/18px 'Google Sans', sans-serif; }
+.wa-mailrow-actions { display: flex; gap: 8px; align-items: center; }
 .wa-mail-head { 
   position: relative; 
   height: 64px; 
@@ -562,6 +579,10 @@
   font: 400 16px/24px 'Google Sans', sans-serif;
   color: #3c4043;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-sizing: border-box;
+}
+.wa-input select, select.wa-input { 
+  width: 100%;
 }
 .wa-input:focus {
   border-color: #1a73e8;
@@ -630,6 +651,64 @@
   font: 400 14px/20px 'Google Sans', sans-serif;
   color: #3c4043;
 }
+.wa-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 16px;
+  max-width: 720px;
+}
+.wa-context-grid > .wa-field { 
+  min-width: 0; /* 防止グリッドの子要素が隣の列に食い込む */
+}
+.wa-templates {
+  display: grid;
+  gap: 12px;
+}
+.wa-template-item {
+  background: #ffffff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+.wa-template-item:active { transform: translateY(1px); }
+.wa-template-item:hover {
+  background: #f8f9fa;
+  border-color: #c6c6c6;
+}
+.wa-template-item .tpl-name {
+  font: 600 14px/20px 'Google Sans', sans-serif;
+  margin-bottom: 4px;
+}
+.wa-template-item .tpl-subject {
+  color: #5f6368;
+}
+.wa-suggest {
+  display: grid;
+  gap: 12px;
+}
+.wa-suggest-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+.wa-suggest-text {
+  background: #ffffff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 12px;
+}
+.wa-suggest-tips {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* context section wrapper (no absolute positioning) */
+.wa-context-section {
+  position: static;
+}
 .wa-section-textarea { 
   width: 100%; 
   min-height: 200px; 
@@ -642,6 +721,7 @@
   resize: vertical;
   outline: none;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-sizing: border-box;
 }
 .wa-section-textarea:focus {
   border-color: #1a73e8;
@@ -706,3 +786,27 @@
   border-top: 1px solid #dadce0; 
   margin: 16px 8px; 
 }
+
+/* Simple modal */
+.wa-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(32,33,36,0.35);
+  display: grid;
+  place-items: center;
+  z-index: 2000;
+}
+.wa-modal-content {
+  width: min(520px, calc(100vw - 32px));
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  padding: 20px;
+}
+.wa-modal-title {
+  font: 600 18px/24px 'Google Sans', sans-serif;
+  margin-bottom: 12px;
+}
+.wa-modal-body { margin-bottom: 16px; }
+.wa-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
