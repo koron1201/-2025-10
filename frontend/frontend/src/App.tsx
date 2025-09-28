@@ -36,6 +36,7 @@ function App() {
   const [calStatus, setCalStatus] = useState<string | null>(null)
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
   const languageDropdownRef = useRef<HTMLDivElement>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Context AI states
   const [jobRole, setJobRole] = useState<JobRole>('sales')
@@ -58,6 +59,7 @@ function App() {
   const [chatWith, setChatWith] = useState('')
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ with: string; text: string; ts: number }[]>([])
+  // optional info toast placeholder (not used now)
 
   // Mailbox states
   const [view, setView] = useState<'compose' | 'mailbox'>('compose')
@@ -86,6 +88,12 @@ function App() {
     if (mailbox === 'sent') return mails.filter(m => m.folder === 'sent')
     return mails.filter(m => m.folder === 'drafts')
   }, [mails, mailbox, openSnoozed])
+  const searchedMails = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return [] as MailItem[]
+    return mails.filter(m => `${m.subject} ${m.body}`.toLowerCase().includes(q))
+  }, [mails, searchQuery])
+  const listToShow = searchQuery.trim() ? searchedMails : filteredMails
   const inboxCount = useMemo(() => mails.filter(m => m.folder === 'inbox' && !(m.snoozedUntilTs && m.snoozedUntilTs > Date.now())).length, [mails])
   const toggleStar = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, starred: !m.starred } : m))
   const snoozeTomorrow = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, snoozedUntilTs: Date.now() + 24 * 60 * 60 * 1000 } : m))
@@ -240,6 +248,26 @@ function App() {
     }
   }
 
+  async function sendEmailDirect(recipientEmail: string, subject: string, body: string) {
+    // Option 1a: Gmail compose in browser (no backend)
+    const compose = (import.meta as any).env.VITE_MAIL_COMPOSE
+    if (compose === 'gmail') {
+      const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(url, '_blank')
+      return { status: 'ok' as const }
+    }
+    // Option 1b: mailto (no backend required)
+    if ((import.meta as any).env.VITE_USE_MAILTO === 'true') {
+      const url = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(url, '_blank')
+      return { status: 'ok' as const }
+    }
+    // Option 2: Outlook integration (backend required when VITE_USE_MOCK !== 'true')
+    const r = await sendOutlook({ recipient: recipientEmail, subject, body })
+    if (r.status !== 'ok') throw new Error(r.errorMessage || 'failed')
+    return r
+  }
+
   return (
     <>
     <div className="wa-app">
@@ -252,6 +280,8 @@ function App() {
             className="wa-search-input"
             placeholder={t.searchPlaceholder}
             aria-label="検索"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setView('mailbox') }}
           />
           <button className="wa-search-filter" aria-label="フィルター" />
         </div>
@@ -603,11 +633,11 @@ function App() {
           </div>
           ) : (
             <div className="wa-list">
-              {filteredMails.length === 0 ? (
+              {listToShow.length === 0 ? (
                 <div className="wa-section-box">{t.mailboxEmpty}</div>
               ) : (
-                filteredMails.map((m) => (
-                  <div className="wa-mailrow" key={m.id}>
+                listToShow.map((m) => (
+                  <div className="wa-mailrow" key={m.id} onClick={() => { setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>
                     <div className="wa-mailrow-main">
                       <div className="wa-mailrow-subject">{m.subject}</div>
                       <div className="wa-mailrow-snippet">{m.body}</div>
@@ -619,10 +649,7 @@ function App() {
                       ) : (
                         <button className="wa-btn" onClick={() => snoozeTomorrow(m.id)}>{t.snoozeUntilTomorrow}</button>
                       )}
-                      <button className="wa-btn" onClick={() => {
-                        setView('compose')
-                        setResult({ subject: m.subject, body: m.body })
-                      }}>{t.openMail}</button>
+                      <button className="wa-btn" onClick={(e) => { e.stopPropagation(); setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>{t.openMail}</button>
                     </div>
                   </div>
                 ))
@@ -707,11 +734,20 @@ function App() {
           </div>
           <div className="wa-modal-actions">
             <button className="wa-btn" onClick={() => setShowChat(false)}>{t.cancel}</button>
-            <button className="wa-btn" onClick={() => {
+            <button className="wa-btn" onClick={async () => {
               if (!chatWith) return
               if (!chatInput.trim()) return
-              setChatMessages(prev => [...prev, { with: chatWith, text: chatInput.trim(), ts: Date.now() }])
-              setChatInput('')
+              try {
+                const subject = `Chat with ${chatWith}`
+                const body = chatInput.trim()
+                await sendEmailDirect(chatWith, subject, body)
+                // 送信済みに反映
+                setMails(prev => [{ id: `sent-${Date.now()}`, subject, body, folder: 'sent', dateTs: Date.now() }, ...prev])
+                setChatMessages(prev => [...prev, { with: chatWith, text: body, ts: Date.now() }])
+                setChatInput('')
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              }
             }}>{t.chatSend}</button>
           </div>
         </div>

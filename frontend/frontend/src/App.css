@@ -422,6 +422,8 @@
   background: #fff; border: 1px solid #e8eaed; border-radius: 8px;
   padding: 12px;
 }
+.wa-mailrow { cursor: pointer; }
+.wa-mailrow:active { transform: translateY(1px); }
 .wa-mailrow-subject { font: 600 14px/20px 'Google Sans', sans-serif; color: #3c4043; margin-bottom: 4px; }
 .wa-mailrow-snippet { color: #5f6368; font: 400 13px/18px 'Google Sans', sans-serif; }
 .wa-mailrow-actions { display: flex; gap: 8px; align-items: center; }

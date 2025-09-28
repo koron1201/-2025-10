@@ -21,6 +21,7 @@ import {
   sendOutlookMock,
   createCalendarEventMock,
 } from './mocks'
+import { generateEmailWithGemini } from './gemini'
 
 const defaultHeaders: HeadersInit = {
   'Content-Type': 'application/json',
@@ -40,6 +41,9 @@ export async function generateEmail(
 ): Promise<GenerateEmailResponse> {
   if (import.meta.env.VITE_USE_MOCK === 'true') {
     return generateEmailMock(payload)
+  }
+  if ((import.meta as any).env.VITE_USE_GEMINI === 'true') {
+    return generateEmailWithGemini(payload)
   }
   const res = await fetch('/api/emails/generate', {
     method: 'POST',
