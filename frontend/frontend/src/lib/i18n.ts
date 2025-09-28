@@ -81,6 +81,43 @@ export interface Translations {
   
   // Language
   language: string
+
+  // Context AI
+  contextSectionTitle: string
+  jobRoleLabel: string
+  jobRoleOptions: { sales: string; support: string; hr: string; dev: string }
+  toneLabel: string
+  toneOptions: { formal: string; neutral: string; friendly: string }
+  departmentLabel: string
+  companyStyleLabel: string
+  companyStyleOptions: { conservative: string; casual: string }
+  loadTemplates: string
+  suggestedEdits: string
+  applySuggestion: string
+
+  // Meet Dialog
+  meetNewConfirm: string
+  meetCodeOrLink: string
+  meetCodePlaceholder: string
+  openInNewTab: string
+  joinNow: string
+  cancel: string
+
+  // Mailbox/Browse
+  mailboxEmpty: string
+  openMail: string
+  snoozeUntilTomorrow: string
+  unsnooze: string
+  star: string
+  unstar: string
+
+  // Chat
+  startChatTitle: string
+  chatWithLabel: string
+  chatStart: string
+  chatMessagePlaceholder: string
+  chatSend: string
+  chatEmpty: string
 }
 
 export const translations: Record<Language, Translations> = {
@@ -151,7 +188,46 @@ export const translations: Record<Language, Translations> = {
     
     pageInfo: 'of',
     
-    language: '言語'
+    language: '言語',
+
+    // Context AI
+    contextSectionTitle: 'コンテキストAI',
+    jobRoleLabel: '職種',
+    jobRoleOptions: { sales: '営業', support: 'カスタマーサポート', hr: '人事', dev: '開発' },
+    toneLabel: 'トーン',
+    toneOptions: { formal: 'フォーマル', neutral: 'ニュートラル', friendly: 'フレンドリー' },
+    departmentLabel: '部署（任意）',
+    companyStyleLabel: '社内文化（任意）',
+    companyStyleOptions: { conservative: 'かため', casual: 'カジュアル' },
+    loadTemplates: 'テンプレート取得',
+    suggestedEdits: 'サジェスト',
+    applySuggestion: '反映'
+
+    ,
+    // Meet Dialog
+    meetNewConfirm: 'Google Meet を新しいタブで開きます',
+    meetCodeOrLink: '会議コードまたはリンク',
+    meetCodePlaceholder: '例: abc-defg-hij または https://meet.google.com/...',
+    openInNewTab: '新しいタブで開く',
+    joinNow: '参加',
+    cancel: 'キャンセル'
+
+    ,
+    // Mailbox/Browse
+    mailboxEmpty: 'メールがありません',
+    openMail: '開く',
+    snoozeUntilTomorrow: '明日までスヌーズ',
+    unsnooze: 'スヌーズ解除',
+    star: 'スター',
+    unstar: 'スター解除',
+
+    // Chat
+    startChatTitle: '新しいチャット',
+    chatWithLabel: '相手',
+    chatStart: '開始',
+    chatMessagePlaceholder: 'メッセージを入力...',
+    chatSend: '送信',
+    chatEmpty: 'メッセージはまだありません'
   },
   
   en: {
@@ -221,7 +297,46 @@ export const translations: Record<Language, Translations> = {
     
     pageInfo: 'of',
     
-    language: 'Language'
+    language: 'Language',
+
+    // Context AI
+    contextSectionTitle: 'Context AI',
+    jobRoleLabel: 'Job Role',
+    jobRoleOptions: { sales: 'Sales', support: 'Support', hr: 'HR', dev: 'Development' },
+    toneLabel: 'Tone',
+    toneOptions: { formal: 'Formal', neutral: 'Neutral', friendly: 'Friendly' },
+    departmentLabel: 'Department (optional)',
+    companyStyleLabel: 'Company Style (optional)',
+    companyStyleOptions: { conservative: 'Conservative', casual: 'Casual' },
+    loadTemplates: 'Load Templates',
+    suggestedEdits: 'Suggestions',
+    applySuggestion: 'Apply'
+
+    ,
+    // Meet Dialog
+    meetNewConfirm: 'Open Google Meet in a new tab',
+    meetCodeOrLink: 'Meeting code or link',
+    meetCodePlaceholder: 'e.g., abc-defg-hij or https://meet.google.com/...',
+    openInNewTab: 'Open in new tab',
+    joinNow: 'Join',
+    cancel: 'Cancel'
+
+    ,
+    // Mailbox/Browse
+    mailboxEmpty: 'No emails',
+    openMail: 'Open',
+    snoozeUntilTomorrow: 'Snooze until tomorrow',
+    unsnooze: 'Unsnooze',
+    star: 'Star',
+    unstar: 'Unstar',
+
+    // Chat
+    startChatTitle: 'Start new chat',
+    chatWithLabel: 'Recipient',
+    chatStart: 'Start',
+    chatMessagePlaceholder: 'Type a message...',
+    chatSend: 'Send',
+    chatEmpty: 'No messages yet'
   },
   
   ko: {
@@ -291,7 +406,46 @@ export const translations: Record<Language, Translations> = {
     
     pageInfo: '의',
     
-    language: '언어'
+    language: '언어',
+
+    // Context AI
+    contextSectionTitle: '컨텍스트 AI',
+    jobRoleLabel: '직무',
+    jobRoleOptions: { sales: '영업', support: '고객지원', hr: '인사', dev: '개발' },
+    toneLabel: '톤',
+    toneOptions: { formal: '격식', neutral: '중립', friendly: '친근' },
+    departmentLabel: '부서(선택사항)',
+    companyStyleLabel: '사내 문화(선택사항)',
+    companyStyleOptions: { conservative: '보수적', casual: '캐주얼' },
+    loadTemplates: '템플릿 가져오기',
+    suggestedEdits: '제안',
+    applySuggestion: '반영'
+
+    ,
+    // Meet Dialog
+    meetNewConfirm: 'Google Meet 를 새 탭에서 엽니다',
+    meetCodeOrLink: '회의 코드 또는 링크',
+    meetCodePlaceholder: '예: abc-defg-hij 또는 https://meet.google.com/...',
+    openInNewTab: '새 탭에서 열기',
+    joinNow: '참가',
+    cancel: '취소'
+
+    ,
+    // Mailbox/Browse
+    mailboxEmpty: '메일이 없습니다',
+    openMail: '열기',
+    snoozeUntilTomorrow: '내일까지 미루기',
+    unsnooze: '미루기 해제',
+    star: '중요 표시',
+    unstar: '중요 해제',
+
+    // Chat
+    startChatTitle: '새 채팅 시작',
+    chatWithLabel: '상대',
+    chatStart: '시작',
+    chatMessagePlaceholder: '메시지를 입력하세요...',
+    chatSend: '전송',
+    chatEmpty: '메시지가 없습니다'
   },
   
   zh: {
@@ -361,7 +515,46 @@ export const translations: Record<Language, Translations> = {
     
     pageInfo: ' 的',
     
-    language: '语言'
+    language: '语言',
+
+    // Context AI
+    contextSectionTitle: '上下文 AI',
+    jobRoleLabel: '职能',
+    jobRoleOptions: { sales: '销售', support: '客服', hr: '人力', dev: '开发' },
+    toneLabel: '语气',
+    toneOptions: { formal: '正式', neutral: '中性', friendly: '友好' },
+    departmentLabel: '部门（可选）',
+    companyStyleLabel: '公司风格（可选）',
+    companyStyleOptions: { conservative: '保守', casual: '随意' },
+    loadTemplates: '获取模板',
+    suggestedEdits: '建议',
+    applySuggestion: '应用'
+
+    ,
+    // Meet Dialog
+    meetNewConfirm: '在新标签页中打开 Google Meet',
+    meetCodeOrLink: '会议代码或链接',
+    meetCodePlaceholder: '例：abc-defg-hij 或 https://meet.google.com/...',
+    openInNewTab: '在新标签页打开',
+    joinNow: '加入',
+    cancel: '取消'
+
+    ,
+    // Mailbox/Browse
+    mailboxEmpty: '暂无邮件',
+    openMail: '打开',
+    snoozeUntilTomorrow: '延后到明天',
+    unsnooze: '取消延后',
+    star: '加星标',
+    unstar: '取消星标',
+
+    // Chat
+    startChatTitle: '开始新聊天',
+    chatWithLabel: '对方',
+    chatStart: '开始',
+    chatMessagePlaceholder: '输入消息...',
+    chatSend: '发送',
+    chatEmpty: '暂无消息'
   }
 }
 

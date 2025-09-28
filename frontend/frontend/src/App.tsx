@@ -1,12 +1,22 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import './App.css'
-import { generateEmail, saveHistory, sendSlack, sendOutlook, createCalendarEvent } from './lib/apiClient'
-import type { GenerateEmailResponse, SaveHistoryResponse } from './types/api'
+import { generateEmail, saveHistory, sendSlack, sendOutlook, createCalendarEvent, getContextTemplates, suggestWithContext } from './lib/apiClient'
+import type { GenerateEmailResponse, SaveHistoryResponse, JobRole, Tone, ContextTemplate } from './types/api'
 import { useLanguage } from './contexts/LanguageContext'
 import { type Language, languageNames } from './lib/i18n'
 
 function App() {
   const { language, setLanguage, t } = useLanguage()
+  type Mailbox = 'inbox' | 'starred' | 'snoozed' | 'sent' | 'drafts'
+  type MailItem = {
+    id: string
+    subject: string
+    body: string
+    folder: 'inbox' | 'sent' | 'drafts'
+    starred?: boolean
+    snoozedUntilTs?: number
+    dateTs: number
+  }
   const [keywordsInput, setKeywordsInput] = useState('')
   const [recipient, setRecipient] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,6 +36,68 @@ function App() {
   const [calStatus, setCalStatus] = useState<string | null>(null)
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
   const languageDropdownRef = useRef<HTMLDivElement>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Context AI states
+  const [jobRole, setJobRole] = useState<JobRole>('sales')
+  const [tone, setTone] = useState<Tone>('neutral')
+  const [department, setDepartment] = useState('')
+  const [companyStyle, setCompanyStyle] = useState<'conservative' | 'casual' | ''>('')
+  const [templates, setTemplates] = useState<ContextTemplate[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [suggestedSubject, setSuggestedSubject] = useState<string | undefined>(undefined)
+  const [suggestedBody, setSuggestedBody] = useState<string | undefined>(undefined)
+  const [suggestTips, setSuggestTips] = useState<string[] | undefined>(undefined)
+
+  // Meet modal states
+  const [showMeetNew, setShowMeetNew] = useState(false)
+  const [showMeetJoin, setShowMeetJoin] = useState(false)
+  const [meetCode, setMeetCode] = useState('')
+
+  // Chat states
+  const [showChat, setShowChat] = useState(false)
+  const [chatWith, setChatWith] = useState('')
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<{ with: string; text: string; ts: number }[]>([])
+  // optional info toast placeholder (not used now)
+
+  // Mailbox states
+  const [view, setView] = useState<'compose' | 'mailbox'>('compose')
+  const [mailbox, setMailbox] = useState<Mailbox>('inbox')
+  const [mails, setMails] = useState<MailItem[]>(() => {
+    const saved = localStorage.getItem('wamail-mails')
+    if (saved) {
+      try { return JSON.parse(saved) as MailItem[] } catch {}
+    }
+    const now = Date.now()
+    const seed: MailItem[] = [
+      { id: 'm1', subject: '打ち合わせのご相談', body: '来週の打ち合わせについて…', folder: 'inbox', starred: true, dateTs: now - 2 * 60 * 60 * 1000 },
+      { id: 'm2', subject: '請求書送付の件', body: '請求書をお送りします…', folder: 'inbox', dateTs: now - 26 * 60 * 60 * 1000 },
+      { id: 'm3', subject: '納期確認', body: '納期は今週金曜を予定…', folder: 'inbox', dateTs: now - 3 * 24 * 60 * 60 * 1000 },
+      { id: 'm4', subject: '議事録共有', body: '先日の会議の議事録です…', folder: 'sent', dateTs: now - 5 * 24 * 60 * 60 * 1000 },
+      { id: 'm5', subject: 'ドラフト: 提案書たたき台', body: '提案書のドラフト…', folder: 'drafts', dateTs: now - 1 * 24 * 60 * 60 * 1000 },
+    ]
+    return seed
+  })
+  useEffect(() => { localStorage.setItem('wamail-mails', JSON.stringify(mails)) }, [mails])
+  const openSnoozed = useMemo(() => mails.filter(m => m.snoozedUntilTs && m.snoozedUntilTs > Date.now()), [mails])
+  const filteredMails = useMemo(() => {
+    if (mailbox === 'inbox') return mails.filter(m => m.folder === 'inbox' && !(m.snoozedUntilTs && m.snoozedUntilTs > Date.now()))
+    if (mailbox === 'starred') return mails.filter(m => m.starred)
+    if (mailbox === 'snoozed') return openSnoozed
+    if (mailbox === 'sent') return mails.filter(m => m.folder === 'sent')
+    return mails.filter(m => m.folder === 'drafts')
+  }, [mails, mailbox, openSnoozed])
+  const searchedMails = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return [] as MailItem[]
+    return mails.filter(m => `${m.subject} ${m.body}`.toLowerCase().includes(q))
+  }, [mails, searchQuery])
+  const listToShow = searchQuery.trim() ? searchedMails : filteredMails
+  const inboxCount = useMemo(() => mails.filter(m => m.folder === 'inbox' && !(m.snoozedUntilTs && m.snoozedUntilTs > Date.now())).length, [mails])
+  const toggleStar = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, starred: !m.starred } : m))
+  const snoozeTomorrow = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, snoozedUntilTs: Date.now() + 24 * 60 * 60 * 1000 } : m))
+  const unsnooze = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, snoozedUntilTs: undefined } : m))
 
   // Close language dropdown when clicking outside
   useEffect(() => {
@@ -51,6 +123,16 @@ function App() {
         .filter((s) => s.length > 0),
     [keywordsInput],
   )
+
+  function extractMeetCodeOrUrl(input: string): string | null {
+    if (!input) return null
+    // full url
+    if (/^https?:\/\//i.test(input)) return input
+    // code like abc-defg-hij or 12-3456-7890 (not used by meet but tolerate)
+    const code = input.replace(/\s+/g, '')
+    if (/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(code)) return code
+    return null
+  }
 
   async function onGenerate() {
     setError(null)
@@ -82,6 +164,40 @@ function App() {
       } else {
         alert('履歴に保存しました')
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function onLoadTemplates() {
+    setTemplatesLoading(true)
+    try {
+      const res = await getContextTemplates({ jobRole })
+      setTemplates(res.templates)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
+  async function onSuggestWithContext() {
+    if (!result) return
+    setError(null)
+    try {
+      const res = await suggestWithContext({
+        settings: {
+          jobRole,
+          tone,
+          department: department || undefined,
+          companyStyle: companyStyle || undefined,
+        },
+        subject: result.subject,
+        body: result.body,
+      })
+      setSuggestedSubject(res.subjectSuggestion)
+      setSuggestedBody(res.bodySuggestion)
+      setSuggestTips(res.tips)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -132,7 +248,28 @@ function App() {
     }
   }
 
+  async function sendEmailDirect(recipientEmail: string, subject: string, body: string) {
+    // Option 1a: Gmail compose in browser (no backend)
+    const compose = (import.meta as any).env.VITE_MAIL_COMPOSE
+    if (compose === 'gmail') {
+      const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(url, '_blank')
+      return { status: 'ok' as const }
+    }
+    // Option 1b: mailto (no backend required)
+    if ((import.meta as any).env.VITE_USE_MAILTO === 'true') {
+      const url = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(url, '_blank')
+      return { status: 'ok' as const }
+    }
+    // Option 2: Outlook integration (backend required when VITE_USE_MOCK !== 'true')
+    const r = await sendOutlook({ recipient: recipientEmail, subject, body })
+    if (r.status !== 'ok') throw new Error(r.errorMessage || 'failed')
+    return r
+  }
+
   return (
+    <>
     <div className="wa-app">
       <header className="wa-header">
         <button className="wa-header-menu" aria-label="メニュー" />
@@ -143,6 +280,8 @@ function App() {
             className="wa-search-input"
             placeholder={t.searchPlaceholder}
             aria-label="検索"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setView('mailbox') }}
           />
           <button className="wa-search-filter" aria-label="フィルター" />
         </div>
@@ -181,30 +320,30 @@ function App() {
 
       <div className="wa-main">
         <aside className="wa-nav">
-          <button className="wa-compose">
+          <button className="wa-compose" onClick={() => setView('compose')}>
             <span className="wa-compose-icon" aria-hidden="true" />
             <span>{t.compose}</span>
           </button>
 
           <nav className="wa-nav-list">
-            <a className="wa-nav-item active">
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'inbox' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('inbox') }}>
               <span className="wa-nav-icon inbox" aria-hidden="true" />
               <span className="label">{t.inbox}</span>
-              <span className="count">7</span>
+              <span className="count">{inboxCount}</span>
             </a>
-            <a className="wa-nav-item">
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'starred' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('starred') }}>
               <span className="wa-nav-icon star" aria-hidden="true" />
               <span className="label">{t.starred}</span>
             </a>
-            <a className="wa-nav-item">
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'snoozed' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('snoozed') }}>
               <span className="wa-nav-icon clock" aria-hidden="true" />
               <span className="label">{t.snoozed}</span>
             </a>
-            <a className="wa-nav-item">
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'sent' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('sent') }}>
               <span className="wa-nav-icon send" aria-hidden="true" />
               <span className="label">{t.sent}</span>
             </a>
-            <a className="wa-nav-item">
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'drafts' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('drafts') }}>
               <span className="wa-nav-icon file" aria-hidden="true" />
               <span className="label">{t.drafts}</span>
             </a>
@@ -212,15 +351,15 @@ function App() {
 
           <div className="wa-section">
             <div className="wa-subheader">{t.meet}</div>
-            <a className="wa-nav-item"><span className="wa-nav-icon video" aria-hidden="true" /><span className="label">{t.newMeeting}</span></a>
-            <a className="wa-nav-item"><span className="wa-nav-icon keyboard" aria-hidden="true" /><span className="label">{t.joinMeeting}</span></a>
+            <a className="wa-nav-item" onClick={() => { setShowMeetNew(true) }}><span className="wa-nav-icon video" aria-hidden="true" /><span className="label">{t.newMeeting}</span></a>
+            <a className="wa-nav-item" onClick={() => { setShowMeetJoin(true); setMeetCode('') }}><span className="wa-nav-icon keyboard" aria-hidden="true" /><span className="label">{t.joinMeeting}</span></a>
           </div>
 
           <div className="wa-section">
             <div className="wa-subheader">{t.hangouts}</div>
             <div className="wa-no-chats">
               <div>{t.noRecentChats}</div>
-              <div className="wa-start-chat">{t.startNewChat}</div>
+              <div className="wa-start-chat" onClick={() => setShowChat(true)}>{t.startNewChat}</div>
             </div>
           </div>
         </aside>
@@ -257,6 +396,7 @@ function App() {
             </div>
           </div>
 
+          {view === 'compose' ? (
           <div className="wa-mail">
             <div className="wa-mail-head">
               <div className="wa-mail-title">
@@ -334,6 +474,86 @@ function App() {
 
               {result && (
                 <>
+                  <div className="wa-context-section">
+                    <div className="wa-section-title">{t.contextSectionTitle}</div>
+                    <div className="wa-context-grid">
+                      <label className="wa-field">
+                        <span className="wa-field-label">{t.jobRoleLabel}</span>
+                        <select className="wa-input" value={jobRole} onChange={(e) => setJobRole(e.target.value as JobRole)}>
+                          <option value="sales">{t.jobRoleOptions.sales}</option>
+                          <option value="support">{t.jobRoleOptions.support}</option>
+                          <option value="hr">{t.jobRoleOptions.hr}</option>
+                          <option value="dev">{t.jobRoleOptions.dev}</option>
+                        </select>
+                      </label>
+                      <label className="wa-field">
+                        <span className="wa-field-label">{t.toneLabel}</span>
+                        <select className="wa-input" value={tone} onChange={(e) => setTone(e.target.value as Tone)}>
+                          <option value="formal">{t.toneOptions.formal}</option>
+                          <option value="neutral">{t.toneOptions.neutral}</option>
+                          <option value="friendly">{t.toneOptions.friendly}</option>
+                        </select>
+                      </label>
+                      <label className="wa-field">
+                        <span className="wa-field-label">{t.departmentLabel}</span>
+                        <input className="wa-input" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Sales Team A など" />
+                      </label>
+                      <label className="wa-field">
+                        <span className="wa-field-label">{t.companyStyleLabel}</span>
+                        <select className="wa-input" value={companyStyle} onChange={(e) => setCompanyStyle(e.target.value as any)}>
+                          <option value="">-</option>
+                          <option value="conservative">{t.companyStyleOptions.conservative}</option>
+                          <option value="casual">{t.companyStyleOptions.casual}</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="wa-actions">
+                      <button className="wa-btn" onClick={onLoadTemplates} disabled={templatesLoading}>{templatesLoading ? 'Loading…' : t.loadTemplates}</button>
+                      <button className="wa-btn" onClick={onSuggestWithContext}>{t.suggestedEdits}</button>
+                    </div>
+                    {templates.length > 0 && (
+                      <div className="wa-section-box wa-templates">
+                        {templates.map((tpl) => (
+                          <div key={tpl.id} className="wa-template-item" onClick={() => {
+                            // テンプレートを本文に差し込み（subjectは空の場合のみ適用）
+                            setResult((prev) => prev ? { subject: prev.subject || tpl.subject, body: `${tpl.body}\n\n${prev.body}` } : prev)
+                          }}>
+                            <div className="tpl-name">{tpl.name}</div>
+                            <div className="tpl-subject">{tpl.subject}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(suggestedSubject || suggestedBody) && (
+                      <div className="wa-section-box wa-suggest">
+                        {suggestedSubject && (
+                          <div className="wa-field">
+                            <span className="wa-field-label">{t.subject}</span>
+                            <div className="wa-suggest-row">
+                              <div className="wa-suggest-text">{suggestedSubject}</div>
+                              <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, subject: suggestedSubject } : prev)}>{t.applySuggestion}</button>
+                            </div>
+                          </div>
+                        )}
+                        {suggestedBody && (
+                          <div className="wa-field">
+                            <span className="wa-field-label">{t.body}</span>
+                            <div className="wa-suggest-row">
+                              <textarea className="wa-section-textarea" readOnly value={suggestedBody} />
+                              <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, body: suggestedBody } : prev)}>{t.applySuggestion}</button>
+                            </div>
+                          </div>
+                        )}
+                        {suggestTips && suggestTips.length > 0 && (
+                          <ul className="wa-suggest-tips">
+                            {suggestTips.map((tip, idx) => (
+                              <li key={idx}>{tip}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="wa-result">
                     <div className="wa-result-section">
                       <div className="wa-section-title">{t.subject}</div>
@@ -411,6 +631,31 @@ function App() {
               )}
             </div>
           </div>
+          ) : (
+            <div className="wa-list">
+              {listToShow.length === 0 ? (
+                <div className="wa-section-box">{t.mailboxEmpty}</div>
+              ) : (
+                listToShow.map((m) => (
+                  <div className="wa-mailrow" key={m.id} onClick={() => { setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>
+                    <div className="wa-mailrow-main">
+                      <div className="wa-mailrow-subject">{m.subject}</div>
+                      <div className="wa-mailrow-snippet">{m.body}</div>
+                    </div>
+                    <div className="wa-mailrow-actions">
+                      <button className="wa-btn" onClick={() => toggleStar(m.id)}>{m.starred ? t.unstar : t.star}</button>
+                      {m.snoozedUntilTs && m.snoozedUntilTs > Date.now() ? (
+                        <button className="wa-btn" onClick={() => unsnooze(m.id)}>{t.unsnooze}</button>
+                      ) : (
+                        <button className="wa-btn" onClick={() => snoozeTomorrow(m.id)}>{t.snoozeUntilTomorrow}</button>
+                      )}
+                      <button className="wa-btn" onClick={(e) => { e.stopPropagation(); setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>{t.openMail}</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </section>
 
         <aside className="wa-appbar">
@@ -422,6 +667,93 @@ function App() {
         </aside>
       </div>
     </div>
+
+    {/* Meet New Modal */}
+    {showMeetNew && (
+      <div className="wa-modal" role="dialog" aria-modal="true">
+        <div className="wa-modal-content">
+          <div className="wa-modal-title">Google Meet</div>
+          <div className="wa-modal-body">{t.meetNewConfirm}</div>
+          <div className="wa-modal-actions">
+            <button className="wa-btn" onClick={() => setShowMeetNew(false)}>{t.cancel}</button>
+            <button className="wa-btn primary" onClick={() => {
+              window.open('https://meet.google.com/new', '_blank')
+              setShowMeetNew(false)
+            }}>{t.openInNewTab}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Meet Join Modal */}
+    {showMeetJoin && (
+      <div className="wa-modal" role="dialog" aria-modal="true">
+        <div className="wa-modal-content">
+          <div className="wa-modal-title">Google Meet</div>
+          <div className="wa-modal-body">
+            <label className="wa-field">
+              <span className="wa-field-label">{t.meetCodeOrLink}</span>
+              <input className="wa-input" placeholder={t.meetCodePlaceholder} value={meetCode} onChange={(e) => setMeetCode(e.target.value)} />
+            </label>
+          </div>
+          <div className="wa-modal-actions">
+            <button className="wa-btn" onClick={() => setShowMeetJoin(false)}>{t.cancel}</button>
+            <button className="wa-btn primary" disabled={!meetCode.trim()} onClick={() => {
+              const code = extractMeetCodeOrUrl(meetCode.trim())
+              if (code) {
+                const url = code.startsWith('http') ? code : `https://meet.google.com/${code}`
+                window.open(url, '_blank')
+                setShowMeetJoin(false)
+              }
+            }}>{t.joinNow}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Chat Modal */}
+    {showChat && (
+      <div className="wa-modal" role="dialog" aria-modal="true">
+        <div className="wa-modal-content">
+          <div className="wa-modal-title">{t.startChatTitle}</div>
+          <div className="wa-modal-body">
+            <label className="wa-field">
+              <span className="wa-field-label">{t.chatWithLabel}</span>
+              <input className="wa-input" value={chatWith} onChange={(e) => setChatWith(e.target.value)} placeholder="example@company.com" />
+            </label>
+            <div className="wa-section-box" style={{ minHeight: 100 }}>
+              {chatMessages.length === 0 ? (
+                <div>{t.chatEmpty}</div>
+              ) : (
+                chatMessages.map((m, i) => (
+                  <div key={i}>{m.with}: {m.text}</div>
+                ))
+              )}
+            </div>
+            <input className="wa-input" placeholder={t.chatMessagePlaceholder} value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
+          </div>
+          <div className="wa-modal-actions">
+            <button className="wa-btn" onClick={() => setShowChat(false)}>{t.cancel}</button>
+            <button className="wa-btn" onClick={async () => {
+              if (!chatWith) return
+              if (!chatInput.trim()) return
+              try {
+                const subject = `Chat with ${chatWith}`
+                const body = chatInput.trim()
+                await sendEmailDirect(chatWith, subject, body)
+                // 送信済みに反映
+                setMails(prev => [{ id: `sent-${Date.now()}`, subject, body, folder: 'sent', dateTs: Date.now() }, ...prev])
+                setChatMessages(prev => [...prev, { with: chatWith, text: body, ts: Date.now() }])
+                setChatInput('')
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              }
+            }}>{t.chatSend}</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

@@ -58,3 +58,45 @@ export type GoogleCalendarIntegrationResponse = {
   errorMessage?: string
 }
 
+// ========== Context AI Types ==========
+export type JobRole = 'sales' | 'support' | 'hr' | 'dev'
+
+export type Tone = 'formal' | 'neutral' | 'friendly'
+
+export type CompanyStyle = 'conservative' | 'casual'
+
+export type ContextSettings = {
+  jobRole: JobRole
+  tone: Tone
+  department?: string
+  companyStyle?: CompanyStyle
+}
+
+export type ContextTemplate = {
+  id: string
+  name: string
+  subject: string
+  body: string
+}
+
+export type GetContextTemplatesRequest = {
+  jobRole: JobRole
+}
+
+export type GetContextTemplatesResponse = {
+  templates: ContextTemplate[]
+}
+
+export type SuggestWithContextRequest = {
+  settings: ContextSettings
+  subject: string
+  body: string
+  historySample?: string[]
+}
+
+export type SuggestWithContextResponse = {
+  subjectSuggestion?: string
+  bodySuggestion: string
+  tips?: string[]
+}
+
