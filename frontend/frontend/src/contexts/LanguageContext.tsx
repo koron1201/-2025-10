@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { translations, getDefaultLanguage, type Language, type Translations } from '../lib/i18n'
+import { createContext, useContext, type ReactNode } from 'react'
+import { translations, type Language, type Translations } from '../lib/i18n'
+import useStoredLanguage from '../hooks/useStoredLanguage'
 
 interface LanguageContextType {
   language: Language
@@ -10,19 +11,7 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(() => {
-    // Try to get saved language from localStorage first
-    const saved = localStorage.getItem('wamail-language') as Language
-    if (saved && Object.keys(translations).includes(saved)) {
-      return saved
-    }
-    return getDefaultLanguage()
-  })
-
-  // Save language to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem('wamail-language', language)
-  }, [language])
+  const [language, setLanguage] = useStoredLanguage()
 
   const value: LanguageContextType = {
     language,
@@ -37,6 +26,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useLanguage() {
   const context = useContext(LanguageContext)
   if (context === undefined) {

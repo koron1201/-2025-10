@@ -1,0 +1,36 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient-outer" x1="24" y1="24" x2="136" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1DA1F2" />
+      <stop offset="1" stop-color="#21C96F" />
+    </linearGradient>
+    <linearGradient id="gradient-inner" x1="40" y1="40" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4BA3FF" />
+      <stop offset="1" stop-color="#4AD894" />
+    </linearGradient>
+  </defs>
+  <circle cx="80" cy="80" r="72" stroke="url(#gradient-outer)" stroke-width="16" fill="none" />
+  <g filter="url(#shadow)" transform="translate(12 12)">
+    <rect x="28" y="40" width="80" height="64" rx="10" fill="white" stroke="#1C76D6" stroke-width="4" />
+    <path d="M28 46L68.5 76C72.5 79 77.5 79 81.5 76L108 56" stroke="url(#gradient-inner)" stroke-width="4" stroke-linecap="round" />
+    <path d="M68 80L52 96" stroke="#1C76D6" stroke-width="4" stroke-linecap="round" />
+    <path d="M92 80L108 96" stroke="#1C76D6" stroke-width="4" stroke-linecap="round" />
+    <circle cx="48" cy="60" r="6" fill="#1DA1F2" />
+    <circle cx="80" cy="64" r="6" fill="#21C96F" />
+    <circle cx="104" cy="52" r="6" fill="#4AD894" />
+    <path d="M48 60L80 64L104 52" stroke="#1C76D6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  <defs>
+    <filter id="shadow" x="0" y="0" width="160" height="160" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+      <feOffset dy="4" />
+      <feGaussianBlur stdDeviation="6" />
+      <feComposite in2="hardAlpha" operator="out" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.149 0 0 0 0 0.188 0 0 0 0 0.337 0 0 0 0.2 0" />
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
+    </filter>
+  </defs>
+</svg>
+

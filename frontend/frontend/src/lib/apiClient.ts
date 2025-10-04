@@ -3,20 +3,20 @@ import type {
   GenerateEmailResponse,
   SaveHistoryRequest,
   SaveHistoryResponse,
+  UpdateHistoryRequest,
+  HistoryItem,
   SlackIntegrationRequest,
   SlackIntegrationResponse,
   OutlookIntegrationRequest,
   OutlookIntegrationResponse,
   GoogleCalendarIntegrationRequest,
   GoogleCalendarIntegrationResponse,
-  GetContextTemplatesRequest,
-  GetContextTemplatesResponse,
   SuggestWithContextRequest,
   SuggestWithContextResponse,
 } from '../types/api'
 import {
   generateEmailMock,
-  saveHistoryMock,
+  historyMockApi,
   sendSlackMock,
   sendOutlookMock,
   createCalendarEventMock,
@@ -33,6 +33,20 @@ async function handleJson<T>(res: Response): Promise<T> {
     throw new Error(`API error ${res.status}: ${text}`)
   }
   return (await res.json()) as T
+}
+
+function mapHistoryItem(raw: any): HistoryItem {
+  return {
+    historyId: String(raw?.historyId ?? raw?.id ?? ''),
+    subject: raw?.subject ?? '',
+    body: raw?.body ?? '',
+    user: raw?.user ?? 'anonymous',
+    timestamp: raw?.timestamp ?? undefined,
+    isDuplicate: raw?.isDuplicate ?? raw?.duplicate ?? false,
+    similarityScore:
+      typeof raw?.similarityScore === 'number' ? raw.similarityScore : undefined,
+    duplicateOfId: raw?.duplicateOfId ?? undefined,
+  }
 }
 
 export async function generateEmail(
@@ -59,15 +73,70 @@ export async function saveHistory(
   signal?: AbortSignal,
 ): Promise<SaveHistoryResponse> {
   if (import.meta.env.VITE_USE_MOCK === 'true') {
-    return saveHistoryMock(payload)
+    return historyMockApi.saveHistory(payload)
   }
-  const res = await fetch('/api/emails/history', {
+  const res = await fetch('/api/history/add', {
     method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify({
+      subject: payload.subject,
+      body: payload.body,
+      user: payload.user ?? 'anonymous',
+      timestamp: payload.timestamp ?? new Date().toISOString(),
+    }),
+    signal,
+  })
+  const data = await handleJson<any>(res)
+  return mapHistoryItem(data)
+}
+
+export async function fetchHistory(signal?: AbortSignal): Promise<HistoryItem[]> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    return historyMockApi.fetchHistory()
+  }
+  const res = await fetch('/api/history/all', {
+    headers: defaultHeaders,
+    signal,
+  })
+  const list = await handleJson<any[]>(res)
+  return list.map(mapHistoryItem)
+}
+
+export async function updateHistory(
+  id: string,
+  payload: UpdateHistoryRequest,
+  signal?: AbortSignal,
+): Promise<SaveHistoryResponse> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    return historyMockApi.updateHistory(id, payload)
+  }
+  const res = await fetch(`/api/history/${id}`, {
+    method: 'PUT',
     headers: defaultHeaders,
     body: JSON.stringify(payload),
     signal,
   })
-  return handleJson<SaveHistoryResponse>(res)
+  const data = await handleJson<any>(res)
+  return mapHistoryItem(data)
+}
+
+export async function deleteHistory(
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (import.meta.env.VITE_USE_MOCK === 'true') {
+    await historyMockApi.deleteHistory(id)
+    return
+  }
+  const res = await fetch(`/api/history/${id}`, {
+    method: 'DELETE',
+    headers: defaultHeaders,
+    signal,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to delete history: ${res.status} ${text}`)
+  }
 }
 
 export async function sendSlack(
@@ -116,49 +185,6 @@ export async function createCalendarEvent(
     signal,
   })
   return handleJson<GoogleCalendarIntegrationResponse>(res)
-}
-
-export async function getContextTemplates(
-  payload: GetContextTemplatesRequest,
-  signal?: AbortSignal,
-): Promise<GetContextTemplatesResponse> {
-  if (import.meta.env.VITE_USE_MOCK === 'true') {
-    // モックは mocks.ts 側の関数に委譲せず、簡易レスポンスをここで返す（依存最小化）
-    const samples: Record<string, GetContextTemplatesResponse> = {
-      sales: {
-        templates: [
-          { id: 'sales-1', name: '見積依頼', subject: '【見積依頼】{商品名} の件', body: 'いつもお世話になっております。\n{会社名} の {あなたの名前} です。\n{商品名} につきまして下記条件でお見積りをお願いできますでしょうか。\n…' },
-          { id: 'sales-2', name: '提案フォロー', subject: '先日のご提案のフォロー', body: '先日はご提案の機会をいただきありがとうございました。\nご検討状況はいかがでしょうか。…' },
-        ],
-      },
-      support: {
-        templates: [
-          { id: 'support-1', name: '一次回答', subject: '【ご連絡】お問い合わせの件', body: 'お問い合わせありがとうございます。\n以下のとおり一次回答をお送りします。…' },
-          { id: 'support-2', name: '解決報告', subject: '【解決報告】事象の改善について', body: 'ご連絡いただいた事象について、以下の対応により解決いたしました。…' },
-        ],
-      },
-      hr: {
-        templates: [
-          { id: 'hr-1', name: '面接日程', subject: '面接日程のご案内', body: 'このたびは当社にご応募いただきありがとうございます。\n面接日程についてご案内申し上げます。…' },
-          { id: 'hr-2', name: '内定通知', subject: '【重要】内定のご連絡', body: '選考の結果、内定とさせていただきました。\nつきましては下記のとおりご案内いたします。…' },
-        ],
-      },
-      dev: {
-        templates: [
-          { id: 'dev-1', name: 'リリース案内', subject: '【リリース通知】{プロダクト名} v{バージョン}', body: '関係各位\n{プロダクト名} v{バージョン} をリリースしました。変更点は以下の通りです。…' },
-          { id: 'dev-2', name: 'インシデント報告', subject: '【障害報告】{サービス名}', body: '関係各位\n{サービス名} にて以下の障害が発生しました。現在の状況は…' },
-        ],
-      },
-    }
-    return samples[payload.jobRole] || { templates: [] }
-  }
-  const res = await fetch('/api/context/templates', {
-    method: 'POST',
-    headers: defaultHeaders,
-    body: JSON.stringify(payload),
-    signal,
-  })
-  return handleJson<GetContextTemplatesResponse>(res)
 }
 
 export async function suggestWithContext(

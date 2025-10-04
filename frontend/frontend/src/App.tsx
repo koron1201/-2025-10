@@ -1,18 +1,21 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import './App.css'
-import { generateEmail, saveHistory, sendSlack, sendOutlook, createCalendarEvent, getContextTemplates, suggestWithContext } from './lib/apiClient'
-import type { GenerateEmailResponse, SaveHistoryResponse, JobRole, Tone, ContextTemplate } from './types/api'
+import { generateEmail, saveHistory, fetchHistory, updateHistory, deleteHistory, sendSlack, sendOutlook, createCalendarEvent, suggestWithContext } from './lib/apiClient'
+import type { GenerateEmailResponse, HistoryItem, JobRole, Tone } from './types/api'
 import { useLanguage } from './contexts/LanguageContext'
 import { type Language, languageNames } from './lib/i18n'
+import aimailorLogo from './assets/aimailor-logo.svg'
 
 function App() {
   const { language, setLanguage, t } = useLanguage()
-  type Mailbox = 'inbox' | 'starred' | 'snoozed' | 'sent' | 'drafts'
+  type MailFolder = 'inbox' | 'sent' | 'drafts' | 'trash'
+  type Mailbox = 'inbox' | 'starred' | 'snoozed' | 'sent' | 'drafts' | 'trash'
   type MailItem = {
     id: string
     subject: string
     body: string
-    folder: 'inbox' | 'sent' | 'drafts'
+    folder: MailFolder
+    trashedFrom?: Exclude<MailFolder, 'trash'>
     starred?: boolean
     snoozedUntilTs?: number
     dateTs: number
@@ -22,7 +25,14 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GenerateEmailResponse | null>(null)
-  const [saveResult, setSaveResult] = useState<SaveHistoryResponse | null>(null)
+  const [saveResult, setSaveResult] = useState<HistoryItem | null>(null)
+  const [history, setHistory] = useState<HistoryItem[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null)
+  const [historyDraft, setHistoryDraft] = useState<{ subject: string; body: string }>({ subject: '', body: '' })
+  const historyDrawerRef = useRef<HTMLDivElement>(null)
   const [slackMessage, setSlackMessage] = useState('')
   const [slackChannel, setSlackChannel] = useState('')
   const [slackStatus, setSlackStatus] = useState<string | null>(null)
@@ -37,14 +47,16 @@ function App() {
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
   const languageDropdownRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Context AI states
   const [jobRole, setJobRole] = useState<JobRole>('sales')
   const [tone, setTone] = useState<Tone>('neutral')
   const [department, setDepartment] = useState('')
   const [companyStyle, setCompanyStyle] = useState<'conservative' | 'casual' | ''>('')
-  const [templates, setTemplates] = useState<ContextTemplate[]>([])
-  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [suggestedSubject, setSuggestedSubject] = useState<string | undefined>(undefined)
   const [suggestedBody, setSuggestedBody] = useState<string | undefined>(undefined)
   const [suggestTips, setSuggestTips] = useState<string[] | undefined>(undefined)
@@ -55,19 +67,23 @@ function App() {
   const [meetCode, setMeetCode] = useState('')
 
   // Chat states
-  const [showChat, setShowChat] = useState(false)
-  const [chatWith, setChatWith] = useState('')
-  const [chatInput, setChatInput] = useState('')
-  const [chatMessages, setChatMessages] = useState<{ with: string; text: string; ts: number }[]>([])
   // optional info toast placeholder (not used now)
 
   // Mailbox states
   const [view, setView] = useState<'compose' | 'mailbox'>('compose')
   const [mailbox, setMailbox] = useState<Mailbox>('inbox')
+  const [activeMailId, setActiveMailId] = useState<string | null>(null)
   const [mails, setMails] = useState<MailItem[]>(() => {
-    const saved = localStorage.getItem('wamail-mails')
-    if (saved) {
-      try { return JSON.parse(saved) as MailItem[] } catch {}
+    try {
+      const saved = localStorage.getItem('aimailor-mails')
+      if (saved) {
+        const parsed = JSON.parse(saved) as MailItem[]
+        if (Array.isArray(parsed)) {
+          return parsed
+        }
+      }
+    } catch (storageError) {
+      console.warn('Failed to load saved mails', storageError)
     }
     const now = Date.now()
     const seed: MailItem[] = [
@@ -79,41 +95,154 @@ function App() {
     ]
     return seed
   })
-  useEffect(() => { localStorage.setItem('wamail-mails', JSON.stringify(mails)) }, [mails])
-  const openSnoozed = useMemo(() => mails.filter(m => m.snoozedUntilTs && m.snoozedUntilTs > Date.now()), [mails])
+  useEffect(() => { localStorage.setItem('aimailor-mails', JSON.stringify(mails)) }, [mails])
+  const activeMail = useMemo(() => mails.find(m => m.id === activeMailId) ?? null, [mails, activeMailId])
+  const openSnoozed = useMemo(() => mails.filter(m => m.folder !== 'trash' && m.snoozedUntilTs && m.snoozedUntilTs > Date.now()), [mails])
   const filteredMails = useMemo(() => {
     if (mailbox === 'inbox') return mails.filter(m => m.folder === 'inbox' && !(m.snoozedUntilTs && m.snoozedUntilTs > Date.now()))
-    if (mailbox === 'starred') return mails.filter(m => m.starred)
+    if (mailbox === 'starred') return mails.filter(m => m.starred && m.folder !== 'trash')
     if (mailbox === 'snoozed') return openSnoozed
     if (mailbox === 'sent') return mails.filter(m => m.folder === 'sent')
-    return mails.filter(m => m.folder === 'drafts')
+    if (mailbox === 'drafts') return mails.filter(m => m.folder === 'drafts')
+    return mails.filter(m => m.folder === 'trash')
   }, [mails, mailbox, openSnoozed])
   const searchedMails = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return [] as MailItem[]
-    return mails.filter(m => `${m.subject} ${m.body}`.toLowerCase().includes(q))
+    return mails.filter(m => m.folder !== 'trash' && `${m.subject} ${m.body}`.toLowerCase().includes(q))
   }, [mails, searchQuery])
   const listToShow = searchQuery.trim() ? searchedMails : filteredMails
   const inboxCount = useMemo(() => mails.filter(m => m.folder === 'inbox' && !(m.snoozedUntilTs && m.snoozedUntilTs > Date.now())).length, [mails])
   const toggleStar = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, starred: !m.starred } : m))
   const snoozeTomorrow = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, snoozedUntilTs: Date.now() + 24 * 60 * 60 * 1000 } : m))
   const unsnooze = (id: string) => setMails(prev => prev.map(m => m.id === id ? { ...m, snoozedUntilTs: undefined } : m))
+  const moveToTrash = (id: string) => setMails(prev => prev.map(m => m.id === id ? m.folder === 'trash' ? m : { ...m, trashedFrom: m.folder === 'trash' ? m.trashedFrom : m.folder, folder: 'trash' } : m))
+  const restoreFromTrash = (id: string) => setMails(prev => prev.map(m => {
+    if (m.id !== id) return m
+    if (m.folder !== 'trash') return m
+    const target = m.trashedFrom ?? 'inbox'
+    return { ...m, folder: target, trashedFrom: undefined }
+  }))
+  const permanentlyDelete = (id: string) => setMails(prev => prev.filter(m => m.id !== id))
+  const handleOpenMail = (mail: MailItem) => {
+    setView('compose')
+    setResult({ subject: mail.subject, body: mail.body })
+    setActiveMailId(mail.id)
+  }
 
-  // Close language dropdown when clicking outside
+  // Load search history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('aimailor-search-history')
+    if (savedHistory) {
+      try {
+        setSearchHistory(JSON.parse(savedHistory))
+      } catch {
+        console.warn('Failed to parse search history from localStorage')
+      }
+    }
+  }, [])
+
+  // Save search to history
+  const saveSearchToHistory = (query: string) => {
+    if (query.trim() && !searchHistory.includes(query.trim())) {
+      const newHistory = [query.trim(), ...searchHistory].slice(0, 10) // Keep only last 10 searches
+      setSearchHistory(newHistory)
+      localStorage.setItem('aimailor-search-history', JSON.stringify(newHistory))
+    }
+  }
+
+  // Generate search suggestions
+  const generateSuggestions = (query: string) => {
+    if (!query.trim()) {
+      setSearchSuggestions(searchHistory.slice(0, 5))
+      return
+    }
+
+    const lowerQuery = query.toLowerCase()
+    const suggestions: string[] = []
+    
+    // Add matching search history
+    searchHistory
+      .filter(h => h.toLowerCase().includes(lowerQuery))
+      .slice(0, 3)
+      .forEach(h => suggestions.push(h))
+
+    // Add matching email subjects/bodies
+    const uniqueTerms = new Set<string>()
+    mails.forEach(mail => {
+      const words = `${mail.subject} ${mail.body}`.toLowerCase().split(/\s+/)
+      words.forEach(word => {
+        if (word.length > 2 && word.includes(lowerQuery) && !uniqueTerms.has(word)) {
+          uniqueTerms.add(word)
+          if (suggestions.length < 8) {
+            suggestions.push(word)
+          }
+        }
+      })
+    })
+
+    setSearchSuggestions([...new Set(suggestions)].slice(0, 5))
+  }
+
+  // Handle search input change
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    generateSuggestions(value)
+    setShowSuggestions(true)
+    if (value.trim()) {
+      setView('mailbox')
+    }
+  }
+
+  // Handle search suggestion selection
+  const handleSuggestionSelect = (suggestion: string) => {
+    setSearchQuery(suggestion)
+    setShowSuggestions(false)
+    saveSearchToHistory(suggestion)
+    setView('mailbox')
+  }
+
+  // Handle search submit
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) {
+      saveSearchToHistory(searchQuery)
+      setShowSuggestions(false)
+    }
+  }
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
         setShowLanguageDropdown(false)
       }
+      if (searchInputRef.current && !searchInputRef.current.closest('.wa-search')?.contains(event.target as Node)) {
+        setShowSuggestions(false)
+      }
     }
 
-    if (showLanguageDropdown) {
+    if (showLanguageDropdown || showSuggestions) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
-  }, [showLanguageDropdown])
+  }, [showLanguageDropdown, showSuggestions])
+
+  // Highlight search terms in text
+  const highlightSearchTerms = (text: string, query: string) => {
+    if (!query.trim()) return text
+    
+    const terms = query.toLowerCase().split(/\s+/).filter(term => term.length > 0)
+    let highlightedText = text
+    
+    terms.forEach(term => {
+      const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+      highlightedText = highlightedText.replace(regex, '<mark class="wa-search-highlight">$1</mark>')
+    })
+    
+    return highlightedText
+  }
 
   const keywords = useMemo(
     () =>
@@ -156,28 +285,18 @@ function App() {
     if (!result) return
     setError(null)
     try {
-      const res = await saveHistory({ emailBody: result.body, subject: result.subject })
+      const res = await saveHistory({ subject: result.subject, body: result.body })
       setSaveResult(res)
+      if (showHistory) {
+        setHistory((prev) => [res, ...prev])
+      }
       if (res.isDuplicate) {
-        // アラートも簡潔に変更
         alert('過去に似た内容のメールが保存されています。内容を確認してから送信してください。')
       } else {
         alert('履歴に保存しました')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function onLoadTemplates() {
-    setTemplatesLoading(true)
-    try {
-      const res = await getContextTemplates({ jobRole })
-      setTemplates(res.templates)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setTemplatesLoading(false)
     }
   }
 
@@ -248,24 +367,83 @@ function App() {
     }
   }
 
-  async function sendEmailDirect(recipientEmail: string, subject: string, body: string) {
-    // Option 1a: Gmail compose in browser (no backend)
-    const compose = (import.meta as any).env.VITE_MAIL_COMPOSE
-    if (compose === 'gmail') {
-      const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      window.open(url, '_blank')
-      return { status: 'ok' as const }
+  useEffect(() => {
+    if (!showHistory) return
+    let abort = false
+    setHistoryLoading(true)
+    setHistoryError(null)
+    fetchHistory()
+      .then((items) => {
+        if (!abort) {
+          setHistory(items)
+        }
+      })
+      .catch((e) => {
+        if (!abort) {
+          setHistoryError(e instanceof Error ? e.message : String(e))
+        }
+      })
+      .finally(() => {
+        if (!abort) {
+          setHistoryLoading(false)
+        }
+      })
+    return () => {
+      abort = true
     }
-    // Option 1b: mailto (no backend required)
-    if ((import.meta as any).env.VITE_USE_MAILTO === 'true') {
-      const url = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      window.open(url, '_blank')
-      return { status: 'ok' as const }
+  }, [showHistory])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (historyDrawerRef.current && !historyDrawerRef.current.contains(event.target as Node)) {
+        setShowHistory(false)
+        setEditingHistoryId(null)
+      }
     }
-    // Option 2: Outlook integration (backend required when VITE_USE_MOCK !== 'true')
-    const r = await sendOutlook({ recipient: recipientEmail, subject, body })
-    if (r.status !== 'ok') throw new Error(r.errorMessage || 'failed')
-    return r
+    if (showHistory) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showHistory])
+
+  const openHistoryEditor = (item: HistoryItem) => {
+    setEditingHistoryId(item.historyId)
+    setHistoryDraft({ subject: item.subject, body: item.body })
+  }
+
+  const resetHistoryEditor = () => {
+    setEditingHistoryId(null)
+    setHistoryDraft({ subject: '', body: '' })
+  }
+
+  const handleDeleteHistory = async (id: string) => {
+    if (!window.confirm(t.historyDeleteConfirm ?? 'この履歴を削除しますか？')) return
+    try {
+      await deleteHistory(id)
+      setHistory((prev) => prev.filter((item) => item.historyId !== id))
+      if (editingHistoryId === id) {
+        resetHistoryEditor()
+      }
+    } catch (e) {
+      alert(`${t.historyDeleteFailed ?? '削除に失敗しました'}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  const handleUpdateHistory = async () => {
+    if (!editingHistoryId) return
+    try {
+      const updated = await updateHistory(editingHistoryId, historyDraft)
+      setHistory((prev) => prev.map((item) => (item.historyId === editingHistoryId ? updated : item)))
+      resetHistoryEditor()
+    } catch (e) {
+      alert(`${t.historyUpdateFailed ?? '更新に失敗しました'}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  const handleReuseHistory = (item: HistoryItem) => {
+    setResult({ subject: item.subject, body: item.body })
+    setShowHistory(false)
+    resetHistoryEditor()
   }
 
   return (
@@ -273,17 +451,46 @@ function App() {
     <div className="wa-app">
       <header className="wa-header">
         <button className="wa-header-menu" aria-label="メニュー" />
-        <div className="wa-logo" aria-label={`${t.appName} ロゴ`}>{t.appName}</div>
+        <div className="wa-logo" aria-label={`${t.appName} ロゴ`}>
+          <img src={aimailorLogo} alt="AImailor ロゴ" className="wa-logo-image" />
+          <span className="wa-logo-text">{t.appName}</span>
+        </div>
         <div className="wa-search">
           <span className="wa-search-icon" aria-hidden="true" />
           <input
+            ref={searchInputRef}
             className="wa-search-input"
             placeholder={t.searchPlaceholder}
             aria-label="検索"
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setView('mailbox') }}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => {
+              generateSuggestions(searchQuery)
+              setShowSuggestions(true)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSearchSubmit()
+              }
+              if (e.key === 'Escape') {
+                setShowSuggestions(false)
+              }
+            }}
           />
-          <button className="wa-search-filter" aria-label="フィルター" />
+          {showSuggestions && searchSuggestions.length > 0 && (
+            <div className="wa-search-suggestions">
+              {searchSuggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  className="wa-search-suggestion"
+                  onClick={() => handleSuggestionSelect(suggestion)}
+                >
+                  <span className="wa-suggestion-icon">🔍</span>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="wa-header-actions">
           <button className="wa-hbtn" aria-label="ヘルプ" />
@@ -347,20 +554,16 @@ function App() {
               <span className="wa-nav-icon file" aria-hidden="true" />
               <span className="label">{t.drafts}</span>
             </a>
+            <a className={`wa-nav-item ${view === 'mailbox' && mailbox === 'trash' ? 'active' : ''}`} onClick={() => { setView('mailbox'); setMailbox('trash') }}>
+              <span className="wa-nav-icon trash" aria-hidden="true" />
+              <span className="label">{t.trash}</span>
+            </a>
           </nav>
 
           <div className="wa-section">
             <div className="wa-subheader">{t.meet}</div>
             <a className="wa-nav-item" onClick={() => { setShowMeetNew(true) }}><span className="wa-nav-icon video" aria-hidden="true" /><span className="label">{t.newMeeting}</span></a>
             <a className="wa-nav-item" onClick={() => { setShowMeetJoin(true); setMeetCode('') }}><span className="wa-nav-icon keyboard" aria-hidden="true" /><span className="label">{t.joinMeeting}</span></a>
-          </div>
-
-          <div className="wa-section">
-            <div className="wa-subheader">{t.hangouts}</div>
-            <div className="wa-no-chats">
-              <div>{t.noRecentChats}</div>
-              <div className="wa-start-chat" onClick={() => setShowChat(true)}>{t.startNewChat}</div>
-            </div>
           </div>
         </aside>
 
@@ -401,7 +604,7 @@ function App() {
             <div className="wa-mail-head">
               <div className="wa-mail-title">
                 <div className="title">{result ? result.subject : 'Place for your email content'}</div>
-                <div className="tag">{t.inbox}</div>
+                <div className="tag">{activeMail ? t.mailFolderLabels[activeMail.folder] : t.inbox}</div>
               </div>
               <div className="wa-mail-actions">
                 <button className="wa-tbtn print" aria-label="印刷" />
@@ -416,7 +619,6 @@ function App() {
                   <div className="row1">
                     <div className="name">{t.senderName}</div>
                     <div className="email">&lt;email@domain.com&gt;</div>
-                    <button className="unsubscribe">{t.unsubscribe}</button>
                   </div>
                   <div className="row2">
                     <div className="to">{t.toMe}</div>
@@ -476,83 +678,125 @@ function App() {
                 <>
                   <div className="wa-context-section">
                     <div className="wa-section-title">{t.contextSectionTitle}</div>
-                    <div className="wa-context-grid">
-                      <label className="wa-field">
-                        <span className="wa-field-label">{t.jobRoleLabel}</span>
-                        <select className="wa-input" value={jobRole} onChange={(e) => setJobRole(e.target.value as JobRole)}>
-                          <option value="sales">{t.jobRoleOptions.sales}</option>
-                          <option value="support">{t.jobRoleOptions.support}</option>
-                          <option value="hr">{t.jobRoleOptions.hr}</option>
-                          <option value="dev">{t.jobRoleOptions.dev}</option>
-                        </select>
-                      </label>
-                      <label className="wa-field">
-                        <span className="wa-field-label">{t.toneLabel}</span>
-                        <select className="wa-input" value={tone} onChange={(e) => setTone(e.target.value as Tone)}>
-                          <option value="formal">{t.toneOptions.formal}</option>
-                          <option value="neutral">{t.toneOptions.neutral}</option>
-                          <option value="friendly">{t.toneOptions.friendly}</option>
-                        </select>
-                      </label>
-                      <label className="wa-field">
-                        <span className="wa-field-label">{t.departmentLabel}</span>
-                        <input className="wa-input" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Sales Team A など" />
-                      </label>
-                      <label className="wa-field">
-                        <span className="wa-field-label">{t.companyStyleLabel}</span>
-                        <select className="wa-input" value={companyStyle} onChange={(e) => setCompanyStyle(e.target.value as any)}>
-                          <option value="">-</option>
-                          <option value="conservative">{t.companyStyleOptions.conservative}</option>
-                          <option value="casual">{t.companyStyleOptions.casual}</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="wa-actions">
-                      <button className="wa-btn" onClick={onLoadTemplates} disabled={templatesLoading}>{templatesLoading ? 'Loading…' : t.loadTemplates}</button>
-                      <button className="wa-btn" onClick={onSuggestWithContext}>{t.suggestedEdits}</button>
-                    </div>
-                    {templates.length > 0 && (
-                      <div className="wa-section-box wa-templates">
-                        {templates.map((tpl) => (
-                          <div key={tpl.id} className="wa-template-item" onClick={() => {
-                            // テンプレートを本文に差し込み（subjectは空の場合のみ適用）
-                            setResult((prev) => prev ? { subject: prev.subject || tpl.subject, body: `${tpl.body}\n\n${prev.body}` } : prev)
-                          }}>
-                            <div className="tpl-name">{tpl.name}</div>
-                            <div className="tpl-subject">{tpl.subject}</div>
+                    <div className="wa-context-layout">
+                      <aside className="wa-context-guide">
+                        <p className="wa-context-intro">{t.contextIntro}</p>
+                        <div className="wa-context-steps">
+                          <div className="wa-context-step">
+                            <div className="wa-context-step-bullet">1</div>
+                            <div className="wa-context-step-content">
+                              <div className="wa-context-step-title">{t.contextBasicTitle}</div>
+                              <div className="wa-context-step-desc">{t.contextBasicDescription}</div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {(suggestedSubject || suggestedBody) && (
-                      <div className="wa-section-box wa-suggest">
-                        {suggestedSubject && (
-                          <div className="wa-field">
-                            <span className="wa-field-label">{t.subject}</span>
-                            <div className="wa-suggest-row">
-                              <div className="wa-suggest-text">{suggestedSubject}</div>
-                              <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, subject: suggestedSubject } : prev)}>{t.applySuggestion}</button>
+                          <div className="wa-context-step">
+                            <div className="wa-context-step-bullet">2</div>
+                            <div className="wa-context-step-content">
+                              <div className="wa-context-step-title">{t.contextAudienceTitle}</div>
+                              <div className="wa-context-step-desc">{t.contextAudienceDescription}</div>
+                            </div>
+                          </div>
+                          <div className="wa-context-step">
+                            <div className="wa-context-step-bullet">3</div>
+                            <div className="wa-context-step-content">
+                              <div className="wa-context-step-title">{t.contextActionsTitle}</div>
+                              <div className="wa-context-step-desc">{t.contextActionsDescription}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </aside>
+                      <div className="wa-context-editor">
+                        <div className="wa-context-group">
+                          <div className="wa-context-group-header">
+                            <div className="wa-context-group-title">{t.contextBasicTitle}</div>
+                            <div className="wa-context-group-desc">{t.contextBasicDescription}</div>
+                          </div>
+                          <div className="wa-context-grid">
+                            <label className="wa-field">
+                              <span className="wa-field-label">{t.jobRoleLabel}</span>
+                              <select className="wa-input" value={jobRole} onChange={(e) => setJobRole(e.target.value as JobRole)}>
+                                <option value="sales">{t.jobRoleOptions.sales}</option>
+                                <option value="support">{t.jobRoleOptions.support}</option>
+                                <option value="hr">{t.jobRoleOptions.hr}</option>
+                                <option value="dev">{t.jobRoleOptions.dev}</option>
+                              </select>
+                            </label>
+                            <label className="wa-field">
+                              <span className="wa-field-label">{t.toneLabel}</span>
+                              <select className="wa-input" value={tone} onChange={(e) => setTone(e.target.value as Tone)}>
+                                <option value="formal">{t.toneOptions.formal}</option>
+                                <option value="neutral">{t.toneOptions.neutral}</option>
+                                <option value="friendly">{t.toneOptions.friendly}</option>
+                              </select>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="wa-context-group">
+                          <div className="wa-context-group-header">
+                            <div className="wa-context-group-title">{t.contextAudienceTitle}</div>
+                            <div className="wa-context-group-desc">{t.contextAudienceDescription}</div>
+                          </div>
+                          <div className="wa-context-grid">
+                            <label className="wa-field">
+                              <span className="wa-field-label">{t.departmentLabel}</span>
+                              <input className="wa-input" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Sales Team A など" />
+                            </label>
+                            <label className="wa-field">
+                              <span className="wa-field-label">{t.companyStyleLabel}</span>
+                              <select className="wa-input" value={companyStyle} onChange={(e) => setCompanyStyle(e.target.value as typeof companyStyle)}>
+                                <option value="">-</option>
+                                <option value="conservative">{t.companyStyleOptions.conservative}</option>
+                                <option value="casual">{t.companyStyleOptions.casual}</option>
+                              </select>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="wa-context-group">
+                          <div className="wa-context-group-header">
+                            <div className="wa-context-group-title">{t.contextActionsTitle}</div>
+                            <div className="wa-context-group-desc">{t.contextActionsDescription}</div>
+                          </div>
+                          <div className="wa-context-actions">
+                            <button className="wa-btn" onClick={onSuggestWithContext}>{t.suggestedEdits}</button>
+                          </div>
+                        </div>
+                        {(suggestedSubject || suggestedBody) && (
+                          <div className="wa-context-group">
+                            <div className="wa-context-group-header">
+                              <div className="wa-context-group-title">{t.contextSuggestionsTitle}</div>
+                              <div className="wa-context-group-desc">{t.contextSuggestionsDescription}</div>
+                            </div>
+                            <div className="wa-section-box wa-suggest">
+                              {suggestedSubject && (
+                                <div className="wa-field">
+                                  <span className="wa-field-label">{t.subject}</span>
+                                  <div className="wa-suggest-row">
+                                    <div className="wa-suggest-text">{suggestedSubject}</div>
+                                    <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, subject: suggestedSubject } : prev)}>{t.applySuggestion}</button>
+                                  </div>
+                                </div>
+                              )}
+                              {suggestedBody && (
+                                <div className="wa-field">
+                                  <span className="wa-field-label">{t.body}</span>
+                                  <div className="wa-suggest-row">
+                                    <textarea className="wa-section-textarea" readOnly value={suggestedBody} />
+                                    <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, body: suggestedBody } : prev)}>{t.applySuggestion}</button>
+                                  </div>
+                                </div>
+                              )}
+                              {suggestTips && suggestTips.length > 0 && (
+                                <ul className="wa-suggest-tips">
+                                  {suggestTips.map((tip, idx) => (
+                                    <li key={idx}>{tip}</li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                           </div>
                         )}
-                        {suggestedBody && (
-                          <div className="wa-field">
-                            <span className="wa-field-label">{t.body}</span>
-                            <div className="wa-suggest-row">
-                              <textarea className="wa-section-textarea" readOnly value={suggestedBody} />
-                              <button className="wa-btn" onClick={() => setResult((prev) => prev ? { ...prev, body: suggestedBody } : prev)}>{t.applySuggestion}</button>
-                            </div>
-                          </div>
-                        )}
-                        {suggestTips && suggestTips.length > 0 && (
-                          <ul className="wa-suggest-tips">
-                            {suggestTips.map((tip, idx) => (
-                              <li key={idx}>{tip}</li>
-                            ))}
-                          </ul>
-                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                   <div className="wa-result">
                     <div className="wa-result-section">
@@ -637,19 +881,45 @@ function App() {
                 <div className="wa-section-box">{t.mailboxEmpty}</div>
               ) : (
                 listToShow.map((m) => (
-                  <div className="wa-mailrow" key={m.id} onClick={() => { setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>
+                      <div
+                        className="wa-mailrow"
+                        key={m.id}
+                        onClick={() => {
+                          setView('compose')
+                          setResult({ subject: m.subject, body: m.body })
+                        }}
+                      >
                     <div className="wa-mailrow-main">
-                      <div className="wa-mailrow-subject">{m.subject}</div>
-                      <div className="wa-mailrow-snippet">{m.body}</div>
+                      <button
+                        className="wa-mailrow-subject"
+                        type="button"
+                        aria-label={`${m.subject} を開く`}
+                        onClick={(event) => { event.stopPropagation(); handleOpenMail(m) }}
+                        dangerouslySetInnerHTML={{ __html: highlightSearchTerms(m.subject, searchQuery) }}
+                      />
+                      <div 
+                        className="wa-mailrow-snippet"
+                        dangerouslySetInnerHTML={{ __html: highlightSearchTerms(m.body.slice(0, 150) + (m.body.length > 150 ? '...' : ''), searchQuery) }}
+                      />
                     </div>
                     <div className="wa-mailrow-actions">
-                      <button className="wa-btn" onClick={() => toggleStar(m.id)}>{m.starred ? t.unstar : t.star}</button>
-                      {m.snoozedUntilTs && m.snoozedUntilTs > Date.now() ? (
-                        <button className="wa-btn" onClick={() => unsnooze(m.id)}>{t.unsnooze}</button>
+                      <button className="wa-btn" onClick={(event) => { event.stopPropagation(); toggleStar(m.id) }}>{m.starred ? t.unstar : t.star}</button>
+                      {m.folder !== 'trash' && (m.snoozedUntilTs && m.snoozedUntilTs > Date.now() ? (
+                        <button className="wa-btn" onClick={(event) => { event.stopPropagation(); unsnooze(m.id) }}>{t.unsnooze}</button>
                       ) : (
-                        <button className="wa-btn" onClick={() => snoozeTomorrow(m.id)}>{t.snoozeUntilTomorrow}</button>
+                        <button className="wa-btn" onClick={(event) => { event.stopPropagation(); snoozeTomorrow(m.id) }}>{t.snoozeUntilTomorrow}</button>
+                      ))}
+                      <button className="wa-btn" onClick={(event) => {
+                        event.stopPropagation()
+                        if (m.folder === 'trash') {
+                          restoreFromTrash(m.id)
+                        } else {
+                          moveToTrash(m.id)
+                        }
+                      }}>{m.folder === 'trash' ? t.restore : t.moveToTrash}</button>
+                      {m.folder === 'trash' && (
+                        <button className="wa-btn danger" onClick={(event) => { event.stopPropagation(); permanentlyDelete(m.id) }}>{t.deleteForever}</button>
                       )}
-                      <button className="wa-btn" onClick={(e) => { e.stopPropagation(); setView('compose'); setResult({ subject: m.subject, body: m.body }) }}>{t.openMail}</button>
                     </div>
                   </div>
                 ))
@@ -663,10 +933,64 @@ function App() {
           <button className="wa-appbtn" aria-label="アプリ2" />
           <button className="wa-appbtn" aria-label="アプリ3" />
           <div className="wa-app-sep" />
-          <button className="wa-appbtn add" aria-label="追加" />
+          <button className="wa-appbtn add" aria-label={t.historyOpen} onClick={() => setShowHistory(true)}>
+            <span className="wa-history-icon" aria-hidden="true">🕒</span>
+          </button>
         </aside>
       </div>
     </div>
+
+    {showHistory && (
+      <div className="wa-history-overlay">
+        <div className="wa-history-drawer" ref={historyDrawerRef} role="dialog" aria-modal="true">
+          <div className="wa-history-header">
+            <h2>{t.historyTitle}</h2>
+            <button className="wa-hbtn" aria-label={t.historyClose} onClick={() => { setShowHistory(false); resetHistoryEditor() }}>×</button>
+          </div>
+          <div className="wa-history-body">
+            {historyLoading ? (
+              <div className="wa-section-box">{t.historyLoading}</div>
+            ) : historyError ? (
+              <div className="wa-error">{t.errorLabel}: {historyError}</div>
+            ) : history.length === 0 ? (
+              <div className="wa-section-box">{t.historyEmpty}</div>
+            ) : (
+              <ul className="wa-history-list">
+                {history.map((item) => (
+                  <li key={item.historyId} className="wa-history-item">
+                    <div className="wa-history-meta">
+                      <div className="wa-history-subject">{item.subject || t.historyNoSubject}</div>
+                      <div className="wa-history-timestamp">{item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}</div>
+                    </div>
+                    <div className="wa-history-actions">
+                      <button className="wa-btn" onClick={() => handleReuseHistory(item)}>{t.historyReuse}</button>
+                      <button className="wa-btn" onClick={() => openHistoryEditor(item)}>{t.historyEdit}</button>
+                      <button className="wa-btn danger" onClick={() => handleDeleteHistory(item.historyId)}>{t.historyDelete}</button>
+                    </div>
+                    {editingHistoryId === item.historyId && (
+                      <div className="wa-history-editor">
+                        <label className="wa-field">
+                          <span className="wa-field-label">{t.historyEditorSubject}</span>
+                          <input className="wa-input" value={historyDraft.subject} onChange={(e) => setHistoryDraft((prev) => ({ ...prev, subject: e.target.value }))} />
+                        </label>
+                        <label className="wa-field">
+                          <span className="wa-field-label">{t.historyEditorBody}</span>
+                          <textarea className="wa-section-textarea" value={historyDraft.body} onChange={(e) => setHistoryDraft((prev) => ({ ...prev, body: e.target.value }))} />
+                        </label>
+                        <div className="wa-history-editor-actions">
+                          <button className="wa-btn" onClick={handleUpdateHistory}>{t.historyEditorSave}</button>
+                          <button className="wa-btn" onClick={resetHistoryEditor}>{t.historyEditorCancel}</button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Meet New Modal */}
     {showMeetNew && (
@@ -711,48 +1035,6 @@ function App() {
       </div>
     )}
 
-    {/* Chat Modal */}
-    {showChat && (
-      <div className="wa-modal" role="dialog" aria-modal="true">
-        <div className="wa-modal-content">
-          <div className="wa-modal-title">{t.startChatTitle}</div>
-          <div className="wa-modal-body">
-            <label className="wa-field">
-              <span className="wa-field-label">{t.chatWithLabel}</span>
-              <input className="wa-input" value={chatWith} onChange={(e) => setChatWith(e.target.value)} placeholder="example@company.com" />
-            </label>
-            <div className="wa-section-box" style={{ minHeight: 100 }}>
-              {chatMessages.length === 0 ? (
-                <div>{t.chatEmpty}</div>
-              ) : (
-                chatMessages.map((m, i) => (
-                  <div key={i}>{m.with}: {m.text}</div>
-                ))
-              )}
-            </div>
-            <input className="wa-input" placeholder={t.chatMessagePlaceholder} value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
-          </div>
-          <div className="wa-modal-actions">
-            <button className="wa-btn" onClick={() => setShowChat(false)}>{t.cancel}</button>
-            <button className="wa-btn" onClick={async () => {
-              if (!chatWith) return
-              if (!chatInput.trim()) return
-              try {
-                const subject = `Chat with ${chatWith}`
-                const body = chatInput.trim()
-                await sendEmailDirect(chatWith, subject, body)
-                // 送信済みに反映
-                setMails(prev => [{ id: `sent-${Date.now()}`, subject, body, folder: 'sent', dateTs: Date.now() }, ...prev])
-                setChatMessages(prev => [...prev, { with: chatWith, text: body, ts: Date.now() }])
-                setChatInput('')
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e))
-              }
-            }}>{t.chatSend}</button>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   )
 }
