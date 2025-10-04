@@ -9,16 +9,30 @@ export type GenerateEmailResponse = {
 }
 
 export type SaveHistoryRequest = {
-  userId?: string
-  emailBody: string
-  subject?: string
+  user?: string
+  subject: string
+  body: string
+  timestamp?: string
 }
 
 export type SaveHistoryResponse = {
   historyId: string
+  subject: string
+  body: string
+  user?: string
+  timestamp?: string
   isDuplicate?: boolean
   similarityScore?: number
   duplicateOfId?: string
+}
+
+export type HistoryItem = SaveHistoryResponse
+
+export type UpdateHistoryRequest = {
+  subject?: string
+  body?: string
+  user?: string
+  timestamp?: string
 }
 
 export type SlackIntegrationRequest = {
@@ -70,21 +84,6 @@ export type ContextSettings = {
   tone: Tone
   department?: string
   companyStyle?: CompanyStyle
-}
-
-export type ContextTemplate = {
-  id: string
-  name: string
-  subject: string
-  body: string
-}
-
-export type GetContextTemplatesRequest = {
-  jobRole: JobRole
-}
-
-export type GetContextTemplatesResponse = {
-  templates: ContextTemplate[]
 }
 
 export type SuggestWithContextRequest = {

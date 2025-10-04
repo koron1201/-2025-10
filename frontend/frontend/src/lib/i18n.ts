@@ -12,18 +12,16 @@ export interface Translations {
   snoozed: string
   sent: string
   drafts: string
+  trash: string
   meet: string
   newMeeting: string
   joinMeeting: string
-  hangouts: string
-  noRecentChats: string
-  startNewChat: string
-  
+  mailFolderLabels: Record<'inbox' | 'sent' | 'drafts' | 'trash', string>
+
   // Mail Content
   subject: string
   body: string
   senderName: string
-  unsubscribe: string
   toMe: string
   
   // Form Labels
@@ -91,7 +89,6 @@ export interface Translations {
   departmentLabel: string
   companyStyleLabel: string
   companyStyleOptions: { conservative: string; casual: string }
-  loadTemplates: string
   suggestedEdits: string
   applySuggestion: string
 
@@ -105,24 +102,45 @@ export interface Translations {
 
   // Mailbox/Browse
   mailboxEmpty: string
-  openMail: string
   snoozeUntilTomorrow: string
   unsnooze: string
   star: string
   unstar: string
+  moveToTrash: string
+  restore: string
+  deleteForever: string
 
-  // Chat
-  startChatTitle: string
-  chatWithLabel: string
-  chatStart: string
-  chatMessagePlaceholder: string
-  chatSend: string
-  chatEmpty: string
+  // Context helper copy
+  contextIntro: string
+  contextBasicTitle: string
+  contextBasicDescription: string
+  contextAudienceTitle: string
+  contextAudienceDescription: string
+  contextActionsTitle: string
+  contextActionsDescription: string
+  contextSuggestionsTitle: string
+  contextSuggestionsDescription: string
+  historyTitle: string
+  historyOpen: string
+  historyClose: string
+  historyLoading: string
+  historyEmpty: string
+  historyNoSubject: string
+  historyReuse: string
+  historyEdit: string
+  historyDelete: string
+  historyDeleteConfirm: string
+  historyDeleteFailed: string
+  historyUpdateFailed: string
+  historyEditorSubject: string
+  historyEditorBody: string
+  historyEditorSave: string
+  historyEditorCancel: string
 }
 
 export const translations: Record<Language, Translations> = {
   ja: {
-    appName: 'WAMail',
+    appName: 'AImailor',
     searchPlaceholder: 'メールを検索',
     
     compose: '作成',
@@ -131,17 +149,19 @@ export const translations: Record<Language, Translations> = {
     snoozed: 'スヌーズ中',
     sent: '送信済み',
     drafts: '下書き',
+    trash: 'ゴミ箱',
     meet: 'Meet',
     newMeeting: '新しい会議',
     joinMeeting: '会議に参加',
-    hangouts: 'ハングアウト',
-    noRecentChats: '最近のチャットなし',
-    startNewChat: '新しいチャットを開始',
-    
+    mailFolderLabels: {
+      inbox: '受信トレイ',
+      sent: '送信済み',
+      drafts: '下書き',
+      trash: 'ゴミ箱'
+    },
     subject: '件名',
     body: '本文',
     senderName: '送信者名',
-    unsubscribe: '配信停止',
     toMe: 'to me',
     
     recipientOptional: '受信者（任意）',
@@ -199,7 +219,6 @@ export const translations: Record<Language, Translations> = {
     departmentLabel: '部署（任意）',
     companyStyleLabel: '社内文化（任意）',
     companyStyleOptions: { conservative: 'かため', casual: 'カジュアル' },
-    loadTemplates: 'テンプレート取得',
     suggestedEdits: 'サジェスト',
     applySuggestion: '反映'
 
@@ -215,23 +234,43 @@ export const translations: Record<Language, Translations> = {
     ,
     // Mailbox/Browse
     mailboxEmpty: 'メールがありません',
-    openMail: '開く',
     snoozeUntilTomorrow: '明日までスヌーズ',
     unsnooze: 'スヌーズ解除',
     star: 'スター',
     unstar: 'スター解除',
+    moveToTrash: 'ゴミ箱へ移動',
+    restore: '復元',
+    deleteForever: '完全に削除',
 
-    // Chat
-    startChatTitle: '新しいチャット',
-    chatWithLabel: '相手',
-    chatStart: '開始',
-    chatMessagePlaceholder: 'メッセージを入力...',
-    chatSend: '送信',
-    chatEmpty: 'メッセージはまだありません'
+    contextIntro: 'キーワードを入力したら、以下のステップの項目を順番に設定していきましょう。',
+    contextBasicTitle: '基本情報を選択',
+    contextBasicDescription: 'キーワード入力後、まずは職種とトーンを選んで想定読者に合った文体に整えます。',
+    contextAudienceTitle: '宛先や社内文化を補足',
+    contextAudienceDescription: '次に部署名や社内文化を入力すると、本文がさらに調整されます。',
+    contextActionsTitle: 'アクションを実行',
+    contextActionsDescription: '最後に改善提案を確認して、文面を磨きます。',
+    contextSuggestionsTitle: '改善提案',
+    contextSuggestionsDescription: '提案を確認し、よければワンクリックで反映しましょう。',
+    historyTitle: '履歴',
+    historyOpen: '履歴を開く',
+    historyClose: '履歴を閉じる',
+    historyLoading: '読み込み中…',
+    historyEmpty: '保存された履歴はまだありません。',
+    historyNoSubject: '(件名なし)',
+    historyReuse: '再利用',
+    historyEdit: '編集',
+    historyDelete: '削除',
+    historyDeleteConfirm: 'この履歴を削除しますか？',
+    historyDeleteFailed: '削除に失敗しました',
+    historyUpdateFailed: '更新に失敗しました',
+    historyEditorSubject: '件名',
+    historyEditorBody: '本文',
+    historyEditorSave: '保存',
+    historyEditorCancel: 'キャンセル'
   },
   
   en: {
-    appName: 'WAMail',
+    appName: 'AImailor',
     searchPlaceholder: 'Search mail',
     
     compose: 'Compose',
@@ -240,17 +279,19 @@ export const translations: Record<Language, Translations> = {
     snoozed: 'Snoozed',
     sent: 'Sent',
     drafts: 'Drafts',
+    trash: 'Trash',
     meet: 'Meet',
     newMeeting: 'New meeting',
     joinMeeting: 'Join a meeting',
-    hangouts: 'Hangouts',
-    noRecentChats: 'No recent chats',
-    startNewChat: 'Start a new one',
-    
+    mailFolderLabels: {
+      inbox: 'Inbox',
+      sent: 'Sent',
+      drafts: 'Drafts',
+      trash: 'Trash'
+    },
     subject: 'Subject',
     body: 'Body',
     senderName: 'Sender Name',
-    unsubscribe: 'Unsubscribe',
     toMe: 'to me',
     
     recipientOptional: 'Recipient (optional)',
@@ -308,7 +349,6 @@ export const translations: Record<Language, Translations> = {
     departmentLabel: 'Department (optional)',
     companyStyleLabel: 'Company Style (optional)',
     companyStyleOptions: { conservative: 'Conservative', casual: 'Casual' },
-    loadTemplates: 'Load Templates',
     suggestedEdits: 'Suggestions',
     applySuggestion: 'Apply'
 
@@ -324,23 +364,43 @@ export const translations: Record<Language, Translations> = {
     ,
     // Mailbox/Browse
     mailboxEmpty: 'No emails',
-    openMail: 'Open',
     snoozeUntilTomorrow: 'Snooze until tomorrow',
     unsnooze: 'Unsnooze',
     star: 'Star',
     unstar: 'Unstar',
+    moveToTrash: 'Move to trash',
+    restore: 'Restore',
+    deleteForever: 'Delete forever',
 
-    // Chat
-    startChatTitle: 'Start new chat',
-    chatWithLabel: 'Recipient',
-    chatStart: 'Start',
-    chatMessagePlaceholder: 'Type a message...',
-    chatSend: 'Send',
-    chatEmpty: 'No messages yet'
+    contextIntro: 'After entering keywords, follow these steps to tailor the generated email.',
+    contextBasicTitle: 'Choose the basics',
+    contextBasicDescription: 'First, pick the job role and tone to match the expected style.',
+    contextAudienceTitle: 'Add audience context',
+    contextAudienceDescription: 'Next, provide department or company culture for more precise wording.',
+    contextActionsTitle: 'Run refinements',
+    contextActionsDescription: 'Finally, review contextual suggestions to polish the draft.',
+    contextSuggestionsTitle: 'Suggested improvements',
+    contextSuggestionsDescription: 'Review and apply recommended subjects or bodies instantly.',
+    historyTitle: 'History',
+    historyOpen: 'Open history',
+    historyClose: 'Close history',
+    historyLoading: 'Loading…',
+    historyEmpty: 'No saved history yet.',
+    historyNoSubject: '(No subject)',
+    historyReuse: 'Reuse',
+    historyEdit: 'Edit',
+    historyDelete: 'Delete',
+    historyDeleteConfirm: 'Delete this history entry?',
+    historyDeleteFailed: 'Failed to delete history',
+    historyUpdateFailed: 'Failed to update history',
+    historyEditorSubject: 'Subject',
+    historyEditorBody: 'Body',
+    historyEditorSave: 'Save',
+    historyEditorCancel: 'Cancel'
   },
   
   ko: {
-    appName: 'WAMail',
+    appName: 'AImailor',
     searchPlaceholder: '메일 검색',
     
     compose: '작성',
@@ -349,17 +409,19 @@ export const translations: Record<Language, Translations> = {
     snoozed: '다시알림',
     sent: '보낸편지함',
     drafts: '임시보관함',
+    trash: '휴지통',
     meet: 'Meet',
     newMeeting: '새 회의',
     joinMeeting: '회의 참가',
-    hangouts: '행아웃',
-    noRecentChats: '최근 채팅 없음',
-    startNewChat: '새로 시작하기',
-    
+    mailFolderLabels: {
+      inbox: '받은편지함',
+      sent: '보낸편지함',
+      drafts: '임시보관함',
+      trash: '휴지통'
+    },
     subject: '제목',
     body: '본문',
     senderName: '보낸사람',
-    unsubscribe: '구독취소',
     toMe: '받는사람: 나',
     
     recipientOptional: '받는사람 (선택사항)',
@@ -417,7 +479,6 @@ export const translations: Record<Language, Translations> = {
     departmentLabel: '부서(선택사항)',
     companyStyleLabel: '사내 문화(선택사항)',
     companyStyleOptions: { conservative: '보수적', casual: '캐주얼' },
-    loadTemplates: '템플릿 가져오기',
     suggestedEdits: '제안',
     applySuggestion: '반영'
 
@@ -433,23 +494,43 @@ export const translations: Record<Language, Translations> = {
     ,
     // Mailbox/Browse
     mailboxEmpty: '메일이 없습니다',
-    openMail: '열기',
     snoozeUntilTomorrow: '내일까지 미루기',
     unsnooze: '미루기 해제',
     star: '중요 표시',
     unstar: '중요 해제',
+    moveToTrash: '휴지통으로 이동',
+    restore: '복원',
+    deleteForever: '완전히 삭제',
 
-    // Chat
-    startChatTitle: '새 채팅 시작',
-    chatWithLabel: '상대',
-    chatStart: '시작',
-    chatMessagePlaceholder: '메시지를 입력하세요...',
-    chatSend: '전송',
-    chatEmpty: '메시지가 없습니다'
+    contextIntro: '키워드를 입력한 다음, 아래 단계를 순서대로 진행하면 더 알맞은 이메일 제안을 받을 수 있어요.',
+    contextBasicTitle: '기본 정보 선택',
+    contextBasicDescription: '먼저 직무와 톤을 선택해 기대하는 문체에 맞춥니다.',
+    contextAudienceTitle: '대상 정보 추가',
+    contextAudienceDescription: '다음으로 부서나 사내 문화를 입력하면 문장이 더욱 정교해집니다.',
+    contextActionsTitle: '다음 작업 실행',
+    contextActionsDescription: '마지막으로 맞춤 제안을 확인하며 문장을 다듬어 주세요.',
+    contextSuggestionsTitle: '개선 제안',
+    contextSuggestionsDescription: '제안을 검토하고 마음에 들면 즉시 반영하세요.',
+    historyTitle: '히스토리',
+    historyOpen: '히스토리 열기',
+    historyClose: '히스토리 닫기',
+    historyLoading: '불러오는 중…',
+    historyEmpty: '저장된 히스토리가 아직 없습니다.',
+    historyNoSubject: '(제목 없음)',
+    historyReuse: '재사용',
+    historyEdit: '편집',
+    historyDelete: '삭제',
+    historyDeleteConfirm: '이 히스토리를 삭제하시겠습니까?',
+    historyDeleteFailed: '히스토리 삭제에 실패했습니다',
+    historyUpdateFailed: '히스토리 업데이트에 실패했습니다',
+    historyEditorSubject: '제목',
+    historyEditorBody: '본문',
+    historyEditorSave: '저장',
+    historyEditorCancel: '취소'
   },
   
   zh: {
-    appName: 'WAMail',
+    appName: 'AImailor',
     searchPlaceholder: '搜索邮件',
     
     compose: '撰写',
@@ -458,17 +539,19 @@ export const translations: Record<Language, Translations> = {
     snoozed: '已延后',
     sent: '已发送',
     drafts: '草稿',
+    trash: '回收站',
     meet: 'Meet',
     newMeeting: '新会议',
     joinMeeting: '加入会议',
-    hangouts: '环聊',
-    noRecentChats: '暂无最近聊天',
-    startNewChat: '开始新聊天',
-    
+    mailFolderLabels: {
+      inbox: '收件箱',
+      sent: '已发送',
+      drafts: '草稿',
+      trash: '回收站'
+    },
     subject: '主题',
     body: '正文',
     senderName: '发件人姓名',
-    unsubscribe: '取消订阅',
     toMe: '发送给我',
     
     recipientOptional: '收件人（可选）',
@@ -526,7 +609,6 @@ export const translations: Record<Language, Translations> = {
     departmentLabel: '部门（可选）',
     companyStyleLabel: '公司风格（可选）',
     companyStyleOptions: { conservative: '保守', casual: '随意' },
-    loadTemplates: '获取模板',
     suggestedEdits: '建议',
     applySuggestion: '应用'
 
@@ -542,19 +624,39 @@ export const translations: Record<Language, Translations> = {
     ,
     // Mailbox/Browse
     mailboxEmpty: '暂无邮件',
-    openMail: '打开',
     snoozeUntilTomorrow: '延后到明天',
     unsnooze: '取消延后',
     star: '加星标',
     unstar: '取消星标',
+    moveToTrash: '移到回收站',
+    restore: '还原',
+    deleteForever: '永久删除',
 
-    // Chat
-    startChatTitle: '开始新聊天',
-    chatWithLabel: '对方',
-    chatStart: '开始',
-    chatMessagePlaceholder: '输入消息...',
-    chatSend: '发送',
-    chatEmpty: '暂无消息'
+    contextIntro: '输入关键词后，按以下步骤依次完善内容，以获得更贴切的邮件建议。',
+    contextBasicTitle: '选择基本信息',
+    contextBasicDescription: '首先选择职能和语气，以匹配期望的文体。',
+    contextAudienceTitle: '补充收件人背景',
+    contextAudienceDescription: '然后输入部门或公司风格，可进一步微调正文。',
+    contextActionsTitle: '执行优化操作',
+    contextActionsDescription: '最后查看上下文建议，对邮件进行润色。',
+    contextSuggestionsTitle: '改进建议',
+    contextSuggestionsDescription: '查看推荐的主题和正文，满意即可一键应用。',
+    historyTitle: '历史',
+    historyOpen: '打开历史',
+    historyClose: '关闭历史',
+    historyLoading: '加载中…',
+    historyEmpty: '暂无历史记录',
+    historyNoSubject: '(无主题)',
+    historyReuse: '再利用',
+    historyEdit: '编辑',
+    historyDelete: '删除',
+    historyDeleteConfirm: '确定要删除此历史记录吗？',
+    historyDeleteFailed: '删除失败',
+    historyUpdateFailed: '更新失败',
+    historyEditorSubject: '主题',
+    historyEditorBody: '正文',
+    historyEditorSave: '保存',
+    historyEditorCancel: '取消'
   }
 }
 
